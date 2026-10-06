@@ -952,6 +952,36 @@ function drawFurniture() {
 // RENDER & INITIALIZATION
 // ============================================================
 
+function centerViewOnBuilding() {
+  if (!building || building.getWalls().length === 0) return;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const wall of building.getWalls()) {
+    minX = Math.min(minX, wall.start[0], wall.end[0]);
+    maxX = Math.max(maxX, wall.start[0], wall.end[0]);
+    minY = Math.min(minY, wall.start[1], wall.end[1]);
+    maxY = Math.max(maxY, wall.start[1], wall.end[1]);
+  }
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  const buildingWidth = maxX - minX;
+  const buildingHeight = maxY - minY;
+
+  if (buildingWidth > 0 && buildingHeight > 0) {
+    const scaleX = (width * 0.65) / buildingWidth;
+    const scaleY = (height * 0.65) / buildingHeight;
+    scale = Math.max(15, Math.min(scaleX, scaleY, 60));
+  }
+
+  offsetX = width / 2 - centerX * scale;
+  offsetY = height / 2 + centerY * scale;
+}
+
 function render() {
   if (!building) return;
 
@@ -981,6 +1011,7 @@ async function loadBuilding() {
 
     const data = JSON.parse(jsonText);
     building = new Building(data);
+    centerViewOnBuilding();
 
     // Initialize JSON Editor
     const jsonEditorTextArea = document.getElementById("json-editor");

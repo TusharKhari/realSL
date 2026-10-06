@@ -16,12 +16,39 @@ export class Building {
       : [{ id: "ground-floor", elevation: 0, height: 2.8 }];
 
     this.levels = levelsData.map(level => new Level(level));
-    this.walls = (data.walls ?? []).map(wall => new Wall(wall));
-    this.rooms = (data.rooms ?? []).map(room => new Room(room, this));
-    this.doors = (data.doors ?? []).map(door => new Door(door, this));
-    this.windows = (data.windows ?? []).map(window => new Window(window, this));
+    const defaultLevelId = this.levels[0]?.id ?? "ground-floor";
+
+    this.walls = (data.walls ?? []).map(wall => {
+      const wData = { ...wall };
+      if (!wData.levelId) wData.levelId = defaultLevelId;
+      return new Wall(wData);
+    });
+
+    this.rooms = (data.rooms ?? []).map(room => {
+      const rData = { ...room };
+      if (!rData.levelId) rData.levelId = defaultLevelId;
+      return new Room(rData, this);
+    });
+
+    this.doors = (data.doors ?? []).map(door => {
+      const dData = { ...door };
+      if (!dData.levelId) dData.levelId = defaultLevelId;
+      return new Door(dData, this);
+    });
+
+    this.windows = (data.windows ?? []).map(window => {
+      const winData = { ...window };
+      if (!winData.levelId) winData.levelId = defaultLevelId;
+      return new Window(winData, this);
+    });
+
     this.stairs = (data.stairs ?? []).map(stair => new Stair(stair));
-    this.furniture = (data.furniture ?? []).map(item => new Furniture(item));
+
+    this.furniture = (data.furniture ?? []).map(item => {
+      const fData = { ...item };
+      if (!fData.levelId) fData.levelId = defaultLevelId;
+      return new Furniture(fData);
+    });
   }
 
   // ==========================================================
@@ -45,11 +72,17 @@ export class Building {
   }
 
   getWallsForLevel(levelId) {
-    return this.walls.filter(wall => wall.levelId === levelId);
+    const defaultId = this.levels[0]?.id;
+    return this.walls.filter(
+      wall => wall.levelId === levelId || (!wall.levelId && levelId === defaultId) || this.levels.length <= 1
+    );
   }
 
   getRoomsForLevel(levelId) {
-    return this.rooms.filter(room => room.levelId === levelId);
+    const defaultId = this.levels[0]?.id;
+    return this.rooms.filter(
+      room => room.levelId === levelId || (!room.levelId && levelId === defaultId) || this.levels.length <= 1
+    );
   }
 
   // ==========================================================
@@ -184,7 +217,10 @@ export class Building {
   }
 
   getFurnitureForLevel(levelId) {
-    return this.furniture.filter(item => item.levelId === levelId);
+    const defaultId = this.levels[0]?.id;
+    return this.furniture.filter(
+      item => item.levelId === levelId || (!item.levelId && levelId === defaultId) || this.levels.length <= 1
+    );
   }
 
   // ==========================================================
