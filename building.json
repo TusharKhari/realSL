@@ -134,5 +134,24 @@
       "width": 1.0,
       "steps": 16
     }
+  ],
+  "furniture": [
+    {
+      "id": "sofa-1",
+      "type": "sofa",
+      "levelId": "ground-floor",
+      "position": [3, 2],
+      "rotation": 90,
+      "scale": [2, 1, 1]
+    },
+    {
+      "id": "table-1",
+      "type": "table",
+      "levelId": "ground-floor",
+      "position": [6, 3],
+      "rotation": 0,
+      "scale": [1, 1, 1]
+    }
   ]
 }
+

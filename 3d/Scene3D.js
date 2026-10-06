@@ -6,6 +6,7 @@ import { createRoomFloor } from "./FloorMesh.js";
 import { createDoorMesh } from "./DoorMesh.js";
 import { createWindowMesh } from "./WindowMesh.js";
 import { createStairMesh } from "./StairMesh.js";
+import { createFurnitureMesh } from "./FurnitureMesh.js";
 
 export class Scene3D {
   constructor(container, building) {
@@ -137,6 +138,14 @@ export class Scene3D {
     // Render multi-level STAIRS
     for (const stair of this.building.getStairs()) {
       const mesh = createStairMesh(stair, this.building);
+      if (mesh) {
+        this.buildingGroup.add(mesh);
+      }
+    }
+
+    // Render multi-level FURNITURE
+    for (const item of this.building.getFurniture()) {
+      const mesh = createFurnitureMesh(item, this.building);
       if (mesh) {
         this.buildingGroup.add(mesh);
       }

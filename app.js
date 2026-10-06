@@ -900,6 +900,44 @@ function drawStairs() {
 }
 
 // ============================================================
+// FURNITURE RENDERING (2D)
+// ============================================================
+
+function drawFurniture() {
+  if (!building || viewMode === "simple") return;
+
+  const furnitureList = activeLevelId ? building.getFurnitureForLevel(activeLevelId) : building.getFurniture();
+
+  for (const item of furnitureList) {
+    const posScreen = worldToScreen(item.position);
+    const w = (item.type === "sofa" ? 2 : item.type === "table" ? 1.5 : 1) * item.scale[0] * scale;
+    const d = (item.type === "sofa" ? 0.9 : item.type === "table" ? 0.9 : 1) * item.scale[2] * scale;
+
+    const group = createElement("g", {
+      transform: `translate(${posScreen[0]}, ${posScreen[1]}) rotate(${-item.rotation})`
+    }, buildingLayer);
+
+    createElement("rect", {
+      x: -w / 2,
+      y: -d / 2,
+      width: w,
+      height: d,
+      rx: 3,
+      ry: 3,
+      fill: item.type === "sofa" ? "rgba(63, 111, 159, 0.4)" : item.type === "table" ? "rgba(139, 90, 43, 0.4)" : "rgba(119, 119, 119, 0.4)",
+      stroke: item.type === "sofa" ? "#3f6f9f" : item.type === "table" ? "#8b5a2b" : "#777777",
+      "stroke-width": "1.5"
+    }, group);
+
+    const label = createText(0, 4, item.id, "furniture-label", group);
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("fill", "#e2e8f0");
+    label.setAttribute("font-size", "10px");
+    label.setAttribute("font-weight", "600");
+  }
+}
+
+// ============================================================
 // RENDER & INITIALIZATION
 // ============================================================
 
@@ -909,6 +947,7 @@ function render() {
   drawGrid();
   drawRooms();
   drawStairs();
+  drawFurniture();
   drawWalls();
   drawDoors();
   drawWindows();

@@ -111,6 +111,17 @@
   }
 
 
+  if (
+    data.furniture !== undefined &&
+    !Array.isArray(data.furniture)
+  ) {
+
+    errors.push(
+      "furniture must be an array."
+    );
+  }
+
+
   // Stop if collections are fundamentally wrong.
 
   if (errors.length > 0) {
@@ -135,6 +146,9 @@
 
   const stairs =
     data.stairs || [];
+
+  const furniture =
+    data.furniture || [];
 
 
   // ==========================================================
@@ -258,6 +272,16 @@
       registerId(
         stair,
         "stairs",
+        index
+      )
+  );
+
+
+  furniture.forEach(
+    (item, index) =>
+      registerId(
+        item,
+        "furniture",
         index
       )
   );
@@ -1274,6 +1298,107 @@
           }
         }
       }
+    }
+  );
+
+
+  // ==========================================================
+  // 11c. FURNITURE
+  // ==========================================================
+
+  furniture.forEach(
+    (item, index) => {
+
+      const path =
+        `furniture[${index}]`;
+
+
+      if (
+        item === null ||
+        typeof item !== "object" ||
+        Array.isArray(item)
+      ) {
+
+        errors.push(
+          `${path} must be an object.`
+        );
+
+        return;
+      }
+
+
+      requireField(
+        item,
+        "id",
+        path
+      );
+
+      requireField(
+        item,
+        "type",
+        path
+      );
+
+      requireField(
+        item,
+        "position",
+        path
+      );
+
+
+      if (
+        item.type !== undefined
+      ) {
+
+        requireString(
+          item.type,
+          `${path}.type`
+        );
+      }
+
+
+      if (
+        item.position !== undefined
+      ) {
+
+        validatePoint(
+          item.position,
+          `${path}.position`
+        );
+      }
+
+
+      if (
+        item.rotation !== undefined
+      ) {
+
+        requireNumber(
+          item.rotation,
+          `${path}.rotation`
+        );
+      }
+
+
+      if (
+        item.scale !== undefined
+      ) {
+
+        if (!Array.isArray(item.scale) || item.scale.length !== 3) {
+          errors.push(
+            `${path}.scale must be an array [sx, sy, sz].`
+          );
+        } else {
+          item.scale.forEach((s, sIndex) => {
+            requirePositiveNumber(s, `${path}.scale[${sIndex}]`);
+          });
+        }
+      }
+
+
+      validateLevelReference(
+        item,
+        path
+      );
     }
   );
 

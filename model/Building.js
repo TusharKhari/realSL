@@ -4,6 +4,7 @@ import { Room } from "./Room.js";
 import { Door } from "./Door.js";
 import { Window } from "./Window.js";
 import { Stair } from "./Stair.js";
+import { Furniture } from "./Furniture.js";
 
 export class Building {
   constructor(data) {
@@ -16,6 +17,7 @@ export class Building {
     this.doors = (data.doors ?? []).map(door => new Door(door, this));
     this.windows = (data.windows ?? []).map(window => new Window(window, this));
     this.stairs = (data.stairs ?? []).map(stair => new Stair(stair));
+    this.furniture = (data.furniture ?? []).map(item => new Furniture(item));
   }
 
   // ==========================================================
@@ -166,6 +168,22 @@ export class Building {
   }
 
   // ==========================================================
+  // FURNITURE
+  // ==========================================================
+
+  getFurniture() {
+    return this.furniture;
+  }
+
+  getFurnitureItem(id) {
+    return this.furniture.find(item => item.id === id) ?? null;
+  }
+
+  getFurnitureForLevel(levelId) {
+    return this.furniture.filter(item => item.levelId === levelId);
+  }
+
+  // ==========================================================
   // IDs
   // ==========================================================
 
@@ -187,7 +205,8 @@ export class Building {
       this.rooms.some(room => room.id === id) ||
       this.doors.some(door => door.id === id) ||
       this.windows.some(window => window.id === id) ||
-      this.stairs.some(stair => stair.id === id)
+      this.stairs.some(stair => stair.id === id) ||
+      this.furniture.some(item => item.id === id)
     );
   }
 
@@ -224,7 +243,8 @@ export class Building {
         sillHeight: window.sillHeight,
         ...(window.levelId ? { levelId: window.levelId } : {})
       })),
-      stairs: this.stairs.map(stair => stair.toJSON())
+      stairs: this.stairs.map(stair => stair.toJSON()),
+      furniture: this.furniture.map(item => item.toJSON())
     };
   }
 
