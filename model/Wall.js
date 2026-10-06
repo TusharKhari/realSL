@@ -67,6 +67,23 @@ export class Wall {
     this.height = value;
   }
 
+  setLength(targetLength) {
+    if (!Number.isFinite(targetLength) || targetLength <= 0) return;
+    const dx = this.end[0] - this.start[0];
+    const dy = this.end[1] - this.start[1];
+    const currentLength = Math.sqrt(dx * dx + dy * dy);
+
+    if (currentLength === 0) {
+      this.end = [this.start[0] + targetLength, this.start[1]];
+      return;
+    }
+
+    this.end = [
+      this.start[0] + (dx / currentLength) * targetLength,
+      this.start[1] + (dy / currentLength) * targetLength
+    ];
+  }
+
   // ==========================================================
   // JSON
   // ==========================================================

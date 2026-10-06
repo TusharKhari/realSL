@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Building 2D Editor</title>
+  <title>Building 2D CAD Editor with Snapping & Dimensions</title>
 
   <style>
     :root {
@@ -17,6 +17,7 @@
       --warning: #f59e0b;
       --danger: #f43f5e;
       --success: #10b981;
+      --snap-purple: #c084fc;
     }
 
     * {
@@ -44,186 +45,57 @@
       user-select: none;
     }
 
-    #canvas.pan-mode {
-      cursor: grab;
-    }
-
-    #canvas.pan-mode:active {
-      cursor: grabbing;
-    }
-
-    #canvas.move-mode {
-      cursor: move;
-    }
-
-    #canvas.crosshair-mode {
-      cursor: crosshair;
-    }
+    #canvas.pan-mode { cursor: grab; }
+    #canvas.pan-mode:active { cursor: grabbing; }
+    #canvas.move-mode { cursor: move; }
+    #canvas.crosshair-mode { cursor: crosshair; }
 
     /* Grid & Axes */
-    .grid-line {
-      stroke: #1e293b;
-      stroke-width: 1;
-    }
-
-    .grid-line-major {
-      stroke: #334155;
-      stroke-width: 1.5;
-    }
-
-    .axis-x {
-      stroke: #0284c7;
-      stroke-width: 2;
-    }
-
-    .axis-y {
-      stroke: #10b981;
-      stroke-width: 2;
-    }
-
-    .axis-label {
-      font-family: monospace;
-      font-size: 10px;
-      fill: #64748b;
-    }
-
-    .origin-label {
-      font-family: monospace;
-      font-size: 11px;
-      fill: #38bdf8;
-      font-weight: bold;
-    }
+    .grid-line { stroke: #1e293b; stroke-width: 1; }
+    .grid-line-major { stroke: #334155; stroke-width: 1.5; }
+    .axis-x { stroke: #0284c7; stroke-width: 2; }
+    .axis-y { stroke: #10b981; stroke-width: 2; }
+    .axis-label { font-family: monospace; font-size: 10px; fill: #64748b; }
+    .origin-label { font-family: monospace; font-size: 11px; fill: #38bdf8; font-weight: bold; }
 
     /* Wall Styling */
-    .wall-front {
-      fill: #475569;
-      stroke: #0f172a;
-      stroke-width: 1;
-      transition: fill 0.15s ease;
-    }
+    .wall-front { fill: #475569; stroke: #0f172a; stroke-width: 1; transition: fill 0.15s; }
+    .wall-side { fill: #334155; stroke: #0f172a; stroke-width: 1; transition: fill 0.15s; }
+    .wall-top { fill: #64748b; stroke: #0f172a; stroke-width: 1; transition: fill 0.15s; }
+    .wall-selected { fill: #f59e0b !important; stroke: #b45309 !important; stroke-width: 3 !important; }
 
-    .wall-side {
-      fill: #334155;
-      stroke: #0f172a;
-      stroke-width: 1;
-      transition: fill 0.15s ease;
-    }
-
-    .wall-top {
-      fill: #64748b;
-      stroke: #0f172a;
-      stroke-width: 1;
-      transition: fill 0.15s ease;
-    }
-
-    .wall-selected {
-      fill: #f59e0b !important;
-      stroke: #b45309 !important;
-      stroke-width: 3 !important;
-    }
-
-    .wall-hover:hover {
-      fill: #38bdf8;
-      cursor: pointer;
-    }
-
-    .wall-line-simple {
-      stroke: #38bdf8;
-      stroke-width: 4;
-      stroke-linecap: round;
-    }
-
-    .wall-plan {
-      fill: #334155;
-      stroke: #94a3b8;
-      stroke-width: 1.5;
-    }
-
-    .wall-centerline {
-      stroke: #38bdf8;
-      stroke-width: 1;
-      stroke-dasharray: 2 2;
-    }
-
-    .wall-label {
-      font-size: 11px;
-      fill: #f8fafc;
-      font-weight: bold;
-      text-anchor: middle;
-    }
+    .wall-line-simple { stroke: #38bdf8; stroke-width: 4; stroke-linecap: round; }
+    .wall-plan { fill: #334155; stroke: #94a3b8; stroke-width: 1.5; }
+    .wall-centerline { stroke: #38bdf8; stroke-width: 1; stroke-dasharray: 2 2; }
+    .wall-label { font-size: 11px; fill: #f8fafc; font-weight: bold; text-anchor: middle; }
 
     /* Room Styling */
-    .room-plan {
-      fill: rgba(56, 189, 248, 0.12);
-      stroke: rgba(56, 189, 248, 0.4);
-      stroke-width: 1.5;
-      stroke-dasharray: 4;
-    }
-
-    .room-label {
-      font-size: 13px;
-      fill: #38bdf8;
-      font-weight: 700;
-      text-anchor: middle;
-    }
-
-    .room-info {
-      font-size: 11px;
-      fill: #94a3b8;
-      text-anchor: middle;
-    }
+    .room-plan { fill: rgba(56, 189, 248, 0.12); stroke: rgba(56, 189, 248, 0.4); stroke-width: 1.5; stroke-dasharray: 4; }
+    .room-label { font-size: 13px; fill: #38bdf8; font-weight: 700; text-anchor: middle; }
+    .room-info { font-size: 11px; fill: #94a3b8; text-anchor: middle; }
 
     /* Door & Window Styling */
-    .door-panel {
-      fill: rgba(245, 158, 11, 0.5);
-      stroke: #f59e0b;
-      stroke-width: 1.5;
-    }
+    .door-panel { fill: rgba(245, 158, 11, 0.5); stroke: #f59e0b; stroke-width: 1.5; }
+    .door-plan { fill: none; stroke: #f59e0b; stroke-width: 2; }
+    .door-arc { fill: none; stroke: #f59e0b; stroke-width: 1.5; stroke-dasharray: 3 3; }
+    .door-label, .window-label { font-size: 10px; fill: #f59e0b; font-weight: 600; text-anchor: middle; }
+    .window-opening { fill: rgba(16, 185, 129, 0.3); stroke: #10b981; stroke-width: 2; }
+    .window-glass { fill: rgba(16, 185, 129, 0.4); stroke: #10b981; stroke-width: 1.5; }
 
-    .door-plan {
-      fill: none;
-      stroke: #f59e0b;
-      stroke-width: 2;
-    }
+    /* CAD Dimension Rendering */
+    .dim-line { stroke: #38bdf8; stroke-width: 1.5; }
+    .dim-ext-line { stroke: rgba(56, 189, 248, 0.5); stroke-width: 1; stroke-dasharray: 2 2; }
+    .dim-arrow { fill: #38bdf8; stroke: #38bdf8; }
+    .dim-label { font-family: monospace; font-size: 11px; fill: #38bdf8; font-weight: bold; text-anchor: middle; }
 
-    .door-arc {
-      fill: none;
-      stroke: #f59e0b;
-      stroke-width: 1.5;
-      stroke-dasharray: 3 3;
-    }
+    /* Snap Markers & Guide Lines */
+    .snap-marker-endpoint { fill: #10b981; stroke: #047857; stroke-width: 2; }
+    .snap-marker-intersection { fill: #c084fc; stroke: #7e22ce; stroke-width: 2; }
+    .snap-marker-grid { fill: #38bdf8; stroke: #0284c7; stroke-width: 1.5; }
+    .snap-angle-guide { stroke: #38bdf8; stroke-width: 1.5; stroke-dasharray: 3 3; }
+    .snap-label { font-family: monospace; font-size: 10px; fill: #f8fafc; font-weight: 600; text-anchor: middle; }
 
-    .door-label, .window-label {
-      font-size: 10px;
-      fill: #f59e0b;
-      font-weight: 600;
-      text-anchor: middle;
-    }
-
-    .window-opening {
-      fill: rgba(16, 185, 129, 0.3);
-      stroke: #10b981;
-      stroke-width: 2;
-    }
-
-    .window-glass {
-      fill: rgba(16, 185, 129, 0.4);
-      stroke: #10b981;
-      stroke-width: 1.5;
-    }
-
-    /* New Wall Preview Line */
-    .preview-line {
-      stroke: #38bdf8;
-      stroke-width: 3;
-      stroke-dasharray: 4 4;
-    }
-
-    .preview-circle {
-      fill: #38bdf8;
-    }
-
-    /* Top Toolbar */
+    /* Toolbar */
     #toolbar {
       position: fixed;
       top: 15px;
@@ -232,7 +104,7 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 8px;
+      padding: 8px 12px;
       background: var(--panel-bg);
       backdrop-filter: blur(12px);
       border: 1px solid var(--panel-border);
@@ -255,26 +127,42 @@
       transition: all 0.2s ease;
     }
 
-    #toolbar button:hover {
-      background: #475569;
+    #toolbar button:hover { background: #475569; }
+    #toolbar button.active { background: var(--accent); color: #0f172a; border-color: var(--accent); font-weight: 600; }
+    #toolbar button.btn-danger { background: rgba(244, 63, 94, 0.2); color: #fecdd3; border-color: #f43f5e; }
+    #toolbar button.btn-danger:hover { background: #f43f5e; color: #fff; }
+
+    /* Snapping Toolbar Bar */
+    #snap-bar {
+      position: fixed;
+      top: 65px;
+      left: 15px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 14px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      font-size: 11px;
+      color: var(--text-muted);
     }
 
-    #toolbar button.active {
-      background: var(--accent);
-      color: #0f172a;
-      border-color: var(--accent);
-      font-weight: 600;
+    #snap-bar label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      color: var(--text-color);
+      font-weight: 500;
     }
 
-    #toolbar button.btn-danger {
-      background: rgba(244, 63, 94, 0.2);
-      color: #fecdd3;
-      border-color: #f43f5e;
-    }
-
-    #toolbar button.btn-danger:hover {
-      background: #f43f5e;
-      color: #fff;
+    #snap-bar input[type="checkbox"] {
+      accent-color: var(--accent);
+      cursor: pointer;
     }
 
     /* Selection Properties Panel */
@@ -393,15 +281,27 @@
     <button id="select-tool" class="active" title="Select and inspect elements">👆 Select</button>
     <button id="pan-tool" title="Pan workspace">✋ Pan</button>
     <button id="move-tool" title="Move wall on canvas">↔️ Move</button>
-    <button id="new-wall-tool" title="Draw new wall">➕ New Wall</button>
+    <button id="new-wall-tool" title="Draw new wall with snapping">➕ New Wall</button>
     <button id="delete-tool" class="btn-danger" title="Delete selected wall">🗑️ Delete</button>
 
     <div style="width: 1px; height: 20px; background: var(--panel-border); margin: 0 4px;"></div>
 
-    <span style="font-size: 11px; color: var(--text-muted);">Mode:</span>
+    <span style="font-size: 11px; color: var(--text-muted);">View:</span>
     <button id="mode-simple-btn">2D Lines</button>
     <button id="mode-plan-btn">2D Plan</button>
     <button id="mode-isometric-btn" class="active">2.5D</button>
+  </div>
+
+  <!-- Snapping & Dimension Bar -->
+  <div id="snap-bar">
+    <strong style="color: var(--accent);">🧲 Snapping:</strong>
+    <label><input type="checkbox" id="snap-grid-cb" checked> Grid (0.25m)</label>
+    <label><input type="checkbox" id="snap-endpoints-cb" checked> Endpoints</label>
+    <label><input type="checkbox" id="snap-intersections-cb" checked> Intersections</label>
+    <label><input type="checkbox" id="snap-angles-cb" checked> Angles (45°/90°)</label>
+
+    <div style="width: 1px; height: 16px; background: var(--panel-border);"></div>
+    <label><input type="checkbox" id="show-dimensions-cb" checked> CAD Dimensions</label>
   </div>
 
   <!-- Selection Property Inspector -->
@@ -430,8 +330,10 @@
       <g id="building"></g>
       <g id="doors"></g>
       <g id="windows"></g>
+      <g id="dimensions"></g>
       <g id="selection"></g>
       <g id="new-wall-preview"></g>
+      <g id="snap-indicators"></g>
     </g>
   </svg>
 
