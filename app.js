@@ -230,7 +230,7 @@ function drawGrid() {
 }
 
 // ============================================================
-// ROOMS RENDERING
+// ROOM GEOMETRY (Shoelace Area, Perimeter, Polygon Centroid)
 // ============================================================
 
 function calculateRoomArea(room) {
@@ -244,13 +244,46 @@ function calculateRoomArea(room) {
   return Math.abs(area) / 2;
 }
 
-function calculateRoomCenter(room) {
-  let x = 0, y = 0;
-  for (const pt of room.boundary) {
-    x += pt[0];
-    y += pt[1];
+function calculateRoomPerimeter(room) {
+  let perimeter = 0;
+  const pts = room.boundary;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    perimeter += Math.sqrt(dx * dx + dy * dy);
   }
-  return [x / room.boundary.length, y / room.boundary.length];
+  return perimeter;
+}
+
+function calculateRoomCentroid(room) {
+  const pts = room.boundary;
+  let areaFactor = 0;
+  let cx = 0;
+  let cy = 0;
+
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const cross = a[0] * b[1] - b[0] * a[1];
+    areaFactor += cross;
+    cx += (a[0] + b[0]) * cross;
+    cy += (a[1] + b[1]) * cross;
+  }
+
+  const signedArea = areaFactor / 2;
+  if (Math.abs(signedArea) < 0.0001) {
+    // Fallback to vertex average if degenerate
+    let avgX = 0, avgY = 0;
+    for (const pt of pts) { avgX += pt[0]; avgY += pt[1]; }
+    return [avgX / pts.length, avgY / pts.length];
+  }
+
+  return [
+    cx / (6 * signedArea),
+    cy / (6 * signedArea)
+  ];
 }
 
 function drawRooms(data) {
@@ -261,12 +294,13 @@ function drawRooms(data) {
     const screenPts = room.boundary.map(worldToScreen);
     createPolygon(screenPts, "room-plan", rooms);
 
-    const center = calculateRoomCenter(room);
-    const centerScreen = worldToScreen(center);
+    const centroid = calculateRoomCentroid(room);
+    const centerScreen = worldToScreen(centroid);
     const area = calculateRoomArea(room);
+    const perimeter = calculateRoomPerimeter(room);
 
     createText(centerScreen[0], centerScreen[1] - 4, room.name || room.id, "room-label", rooms);
-    createText(centerScreen[0], centerScreen[1] + 14, `${area.toFixed(1)} m²`, "room-info", rooms);
+    createText(centerScreen[0], centerScreen[1] + 14, `${area.toFixed(2)} m² • ${perimeter.toFixed(2)} m`, "room-info", rooms);
   }
 }
 
