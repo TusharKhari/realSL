@@ -312,37 +312,41 @@ function drawWallPlan(wall) {
   const p2 = worldToScreen(wall.end);
   createLine(p1, p2, "wall-centerline", building);
 
-  // Wall Label
+  // Wall Label (ID, length, thickness)
   const mid = [ (wall.start[0] + wall.end[0]) / 2, (wall.start[1] + wall.end[1]) / 2 ];
   const midScreen = worldToScreen(mid);
   const wallLen = length(subtract(wall.end, wall.start));
-  createText(midScreen[0], midScreen[1] - (wall.thickness || 0.2) * scale / 2 - 6, `${wall.id || 'wall'} (${wallLen.toFixed(1)}m)`, "room-info", building);
+  const thick = wall.thickness || 0.2;
+  createText(midScreen[0], midScreen[1] - thick * scale / 2 - 6, `${wall.id || 'wall'} • L=${wallLen.toFixed(1)}m • t=${thick}m`, "room-info", building);
 }
 
 function drawWallIsometric(wall) {
-  // Extruded 2.5D view
+  // Extruded 2.5D view (Raised Wall)
   const corners = getWallCorners(wall);
   const bSL = worldToScreen(corners.startLeft);
   const bEL = worldToScreen(corners.endLeft);
   const bER = worldToScreen(corners.endRight);
   const bSR = worldToScreen(corners.startRight);
 
-  const h = heightToScreen(wall.height || 2.8);
+  const wallH = wall.height || 2.8;
+  const h = heightToScreen(wallH);
 
   const tSL = [bSL[0], bSL[1] - h];
   const tEL = [bEL[0], bEL[1] - h];
   const tER = [bER[0], bER[1] - h];
   const tSR = [bSR[0], bSR[1] - h];
 
-  // Polygons for front, side, top
+  // Polygons for front, side, top, other-side
   createPolygon([bSL, bEL, tEL, tSL], "wall-front", building);
   createPolygon([bEL, bER, tER, tEL], "wall-side", building);
   createPolygon([tSL, tEL, tER, tSR], "wall-top", building);
   createPolygon([bSR, bSL, tSL, tSR], "wall-side", building);
 
+  // Midpoint & Wall Label (ID, length, height)
+  const wallLen = length(subtract(wall.end, wall.start));
   const mid = [ (wall.start[0] + wall.end[0]) / 2, (wall.start[1] + wall.end[1]) / 2 ];
   const midScreen = worldToScreen(mid);
-  createText(midScreen[0], midScreen[1] - h - 8, `${wall.id || 'wall'} (${wall.height || 2.8}m)`, "wall-label", building);
+  createText(midScreen[0], midScreen[1] - h - 8, `${wall.id || 'wall'} • ${wallLen.toFixed(1)}m long • ${wallH}m high`, "wall-label", building);
 }
 
 function drawWalls(data) {
