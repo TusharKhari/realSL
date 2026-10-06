@@ -837,15 +837,15 @@ const modeIsometricBtn = document.getElementById("mode-isometric-btn");
 
 function setViewMode(mode) {
   viewMode = mode;
-  modeSimpleBtn.classList.toggle("active", mode === "simple");
-  modePlanBtn.classList.toggle("active", mode === "plan");
-  modeIsometricBtn.classList.toggle("active", mode === "isometric");
+  if (modeSimpleBtn) modeSimpleBtn.classList.toggle("active", mode === "simple");
+  if (modePlanBtn) modePlanBtn.classList.toggle("active", mode === "plan");
+  if (modeIsometricBtn) modeIsometricBtn.classList.toggle("active", mode === "isometric");
   render();
 }
 
-modeSimpleBtn.addEventListener("click", () => setViewMode("simple"));
-modePlanBtn.addEventListener("click", () => setViewMode("plan"));
-modeIsometricBtn.addEventListener("click", () => setViewMode("isometric"));
+if (modeSimpleBtn) modeSimpleBtn.addEventListener("click", () => setViewMode("simple"));
+if (modePlanBtn) modePlanBtn.addEventListener("click", () => setViewMode("plan"));
+if (modeIsometricBtn) modeIsometricBtn.addEventListener("click", () => setViewMode("isometric"));
 
 // ============================================================
 // RENDER & INITIALIZATION
