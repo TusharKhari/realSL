@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Building 3D Real-Time Viewer</title>
+
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --panel-bg: rgba(30, 41, 59, 0.9);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --text-color: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+    }
+
+    #viewer {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Top Floating Navigation Header */
+    #nav-bar {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    #nav-bar a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13px;
+      padding: 4px 10px;
+      background: rgba(56, 189, 248, 0.1);
+      border-radius: 4px;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    #nav-bar a:hover {
+      background: var(--accent);
+      color: #0f172a;
+    }
+
+    .brand-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    /* HUD Overlay */
+    #hud {
+      position: fixed;
+      right: 15px;
+      top: 15px;
+      z-index: 20;
+      padding: 12px 16px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    #hud strong {
+      color: var(--text-color);
+    }
+  </style>
+
+  <!-- ES Import Maps for Three.js & OrbitControls -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+
+<body>
+
+  <div id="nav-bar">
+    <span class="brand-title">🏢 Building 3D View</span>
+    <a href="index.html">← Back to 2D Editor</a>
+  </div>
+
+  <div id="hud">
+    <strong>3D Camera Controls:</strong><br>
+    • Left Click + Drag = Orbit Rotate<br>
+    • Right Click + Drag = Pan Camera<br>
+    • Scroll Wheel = Zoom
+  </div>
+
+  <div id="viewer"></div>
+
+  <script type="module">
+    import { Building } from "./model/Building.js";
+    import { Scene3D } from "./3d/Scene3D.js";
+
+    async function init3D() {
+      try {
+        const response = await fetch("./building.json");
+        if (!response.ok) throw new Error("Could not load building.json");
+
+        const data = await response.json();
+        const building = new Building(data);
+
+        const container = document.getElementById("viewer");
+        const scene3D = new Scene3D(container, building);
+
+        console.log("3D WebGL Building Scene Initialized:", scene3D);
+      } catch (err) {
+        console.error("Failed to initialize 3D scene:", err);
+      }
+    }
+
+    init3D();
+  </script>
+
+</body>
+</html>
