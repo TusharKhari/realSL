@@ -100,6 +100,17 @@
   }
 
 
+  if (
+    data.stairs !== undefined &&
+    !Array.isArray(data.stairs)
+  ) {
+
+    errors.push(
+      "stairs must be an array."
+    );
+  }
+
+
   // Stop if collections are fundamentally wrong.
 
   if (errors.length > 0) {
@@ -121,6 +132,9 @@
 
   const levels =
     data.levels || [];
+
+  const stairs =
+    data.stairs || [];
 
 
   // ==========================================================
@@ -234,6 +248,16 @@
       registerId(
         level,
         "levels",
+        index
+      )
+  );
+
+
+  stairs.forEach(
+    (stair, index) =>
+      registerId(
+        stair,
+        "stairs",
         index
       )
   );
@@ -1062,6 +1086,193 @@
           level.elevation,
           `${path}.elevation`
         );
+      }
+    }
+  );
+
+
+  // ==========================================================
+  // 11b. STAIRS
+  // ==========================================================
+
+  stairs.forEach(
+    (stair, index) => {
+
+      const path =
+        `stairs[${index}]`;
+
+
+      if (
+        stair === null ||
+        typeof stair !== "object" ||
+        Array.isArray(stair)
+      ) {
+
+        errors.push(
+          `${path} must be an object.`
+        );
+
+        return;
+      }
+
+
+      requireField(
+        stair,
+        "id",
+        path
+      );
+
+      requireField(
+        stair,
+        "levelFrom",
+        path
+      );
+
+      requireField(
+        stair,
+        "levelTo",
+        path
+      );
+
+      requireField(
+        stair,
+        "position",
+        path
+      );
+
+      requireField(
+        stair,
+        "width",
+        path
+      );
+
+      requireField(
+        stair,
+        "steps",
+        path
+      );
+
+
+      if (
+        stair.levelFrom !== undefined
+      ) {
+
+        if (
+          requireString(
+            stair.levelFrom,
+            `${path}.levelFrom`
+          )
+        ) {
+
+          if (
+            levels.length > 0 &&
+            !levelIds.has(stair.levelFrom)
+          ) {
+
+            errors.push(
+              `${path}.levelFrom references "${stair.levelFrom}", ` +
+              `but that level does not exist.`
+            );
+          }
+        }
+      }
+
+
+      if (
+        stair.levelTo !== undefined
+      ) {
+
+        if (
+          requireString(
+            stair.levelTo,
+            `${path}.levelTo`
+          )
+        ) {
+
+          if (
+            levels.length > 0 &&
+            !levelIds.has(stair.levelTo)
+          ) {
+
+            errors.push(
+              `${path}.levelTo references "${stair.levelTo}", ` +
+              `but that level does not exist.`
+            );
+          }
+        }
+      }
+
+
+      if (
+        stair.position !== undefined
+      ) {
+
+        validatePoint(
+          stair.position,
+          `${path}.position`
+        );
+      }
+
+
+      if (
+        stair.width !== undefined
+      ) {
+
+        requirePositiveNumber(
+          stair.width,
+          `${path}.width`
+        );
+      }
+
+
+      if (
+        stair.steps !== undefined
+      ) {
+
+        if (
+          requirePositiveNumber(
+            stair.steps,
+            `${path}.steps`
+          )
+        ) {
+
+          if (!Number.isInteger(stair.steps)) {
+            errors.push(
+              `${path}.steps must be an integer.`
+            );
+          }
+        }
+      }
+
+
+      if (
+        stair.levelFrom &&
+        stair.levelTo &&
+        levelIds.has(stair.levelFrom) &&
+        levelIds.has(stair.levelTo)
+      ) {
+
+        const fromLevel =
+          levels.find(l => l.id === stair.levelFrom);
+
+        const toLevel =
+          levels.find(l => l.id === stair.levelTo);
+
+
+        if (
+          fromLevel &&
+          toLevel &&
+          typeof fromLevel.elevation === "number" &&
+          typeof toLevel.elevation === "number"
+        ) {
+
+          if (toLevel.elevation <= fromLevel.elevation) {
+            errors.push(
+              `${path}.levelTo elevation (${toLevel.elevation}m) ` +
+              `must be greater than levelFrom elevation (${fromLevel.elevation}m).`
+            );
+          }
+        }
       }
     }
   );

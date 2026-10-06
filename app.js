@@ -848,6 +848,58 @@ if (modePlanBtn) modePlanBtn.addEventListener("click", () => setViewMode("plan")
 if (modeIsometricBtn) modeIsometricBtn.addEventListener("click", () => setViewMode("isometric"));
 
 // ============================================================
+// STAIRS RENDERING (2D)
+// ============================================================
+
+function drawStairs() {
+  if (!building) return;
+
+  const stairList = activeLevelId ? building.getStairsForLevel(activeLevelId) : building.getStairs();
+
+  for (const stair of stairList) {
+    const posScreen = worldToScreen(stair.position);
+    const widthPx = stair.width * scale;
+    const stepDepth = 0.28;
+    const totalDepthPx = stair.steps * stepDepth * scale;
+
+    const rect = createElement("rect", {
+      x: posScreen[0] - widthPx / 2,
+      y: posScreen[1] - totalDepthPx,
+      width: widthPx,
+      height: totalDepthPx,
+      fill: "rgba(148, 163, 184, 0.15)",
+      stroke: "#94a3b8",
+      "stroke-width": "1.5",
+      "stroke-dasharray": "4 2"
+    }, buildingLayer);
+
+    for (let i = 1; i < stair.steps; i++) {
+      const stepY = posScreen[1] - i * stepDepth * scale;
+      const line = createLine(
+        [posScreen[0] - widthPx / 2, stepY],
+        [posScreen[0] + widthPx / 2, stepY],
+        "stair-tread",
+        buildingLayer
+      );
+      line.setAttribute("stroke", "#64748b");
+      line.setAttribute("stroke-width", "1");
+    }
+
+    const label = createText(
+      posScreen[0],
+      posScreen[1] - totalDepthPx / 2,
+      `STAIRS (${stair.steps} steps)`,
+      "stair-label",
+      buildingLayer
+    );
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("fill", "#cbd5e1");
+    label.setAttribute("font-size", "11px");
+    label.setAttribute("font-weight", "600");
+  }
+}
+
+// ============================================================
 // RENDER & INITIALIZATION
 // ============================================================
 
@@ -856,6 +908,7 @@ function render() {
 
   drawGrid();
   drawRooms();
+  drawStairs();
   drawWalls();
   drawDoors();
   drawWindows();

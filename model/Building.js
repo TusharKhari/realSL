@@ -3,6 +3,7 @@ import { Wall } from "./Wall.js";
 import { Room } from "./Room.js";
 import { Door } from "./Door.js";
 import { Window } from "./Window.js";
+import { Stair } from "./Stair.js";
 
 export class Building {
   constructor(data) {
@@ -14,6 +15,7 @@ export class Building {
     this.rooms = (data.rooms ?? []).map(room => new Room(room, this));
     this.doors = (data.doors ?? []).map(door => new Door(door, this));
     this.windows = (data.windows ?? []).map(window => new Window(window, this));
+    this.stairs = (data.stairs ?? []).map(stair => new Stair(stair));
   }
 
   // ==========================================================
@@ -140,6 +142,30 @@ export class Building {
   }
 
   // ==========================================================
+  // STAIRS
+  // ==========================================================
+
+  getStair(id) {
+    return this.stairs.find(stair => stair.id === id) ?? null;
+  }
+
+  getStairs() {
+    return this.stairs;
+  }
+
+  getStairsBetweenLevels(levelFrom, levelTo) {
+    return this.stairs.filter(
+      stair => stair.levelFrom === levelFrom && stair.levelTo === levelTo
+    );
+  }
+
+  getStairsForLevel(levelId) {
+    return this.stairs.filter(
+      stair => stair.levelFrom === levelId || stair.levelTo === levelId
+    );
+  }
+
+  // ==========================================================
   // IDs
   // ==========================================================
 
@@ -160,7 +186,8 @@ export class Building {
       this.walls.some(wall => wall.id === id) ||
       this.rooms.some(room => room.id === id) ||
       this.doors.some(door => door.id === id) ||
-      this.windows.some(window => window.id === id)
+      this.windows.some(window => window.id === id) ||
+      this.stairs.some(stair => stair.id === id)
     );
   }
 
@@ -196,7 +223,8 @@ export class Building {
         height: window.height,
         sillHeight: window.sillHeight,
         ...(window.levelId ? { levelId: window.levelId } : {})
-      }))
+      })),
+      stairs: this.stairs.map(stair => stair.toJSON())
     };
   }
 

@@ -124,5 +124,15 @@
       "height": 1.2,
       "sillHeight": 0.9
     }
+  ],
+  "stairs": [
+    {
+      "id": "stairs-1",
+      "levelFrom": "ground-floor",
+      "levelTo": "first-floor",
+      "position": [4, 3],
+      "width": 1.0,
+      "steps": 16
+    }
   ]
 }
