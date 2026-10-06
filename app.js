@@ -1,39 +1,39 @@
 // ============================================================
-// JSON → 2D SVG BUILDING RENDERER
+// BUILDING RENDERER (MODEL-DRIVEN ES MODULE)
 // ============================================================
+
+import { Building } from "./model/Building.js";
 
 const canvas = document.getElementById("canvas");
 const grid = document.getElementById("grid");
 const rooms = document.getElementById("rooms");
-const building = document.getElementById("building");
+const buildingLayer = document.getElementById("building");
 const doors = document.getElementById("doors");
 const windows = document.getElementById("windows");
-const labels = document.getElementById("labels");
 
 const jsonInput = document.getElementById("json-input");
 const statusDot = document.getElementById("status-dot");
 const statusText = document.getElementById("status-text");
 const wallCountBadge = document.getElementById("wall-count-badge");
 const errorBanner = document.getElementById("error-banner");
-const cameraInfo = document.getElementById("camera-info");
 const scaleVal = document.getElementById("scale-val");
 const centerVal = document.getElementById("center-val");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 // State
-let buildingData = null;
+let building = null; // Building model instance
 let rawJsonText = "";
-let viewMode = "simple"; // "simple" (2D Lines), "plan" (2D Floorplan), "isometric" (2.5D)
+let viewMode = "simple"; // "simple", "plan", "isometric"
 
 // Camera State
-let scale = 40; // Pixels per meter
-let offsetX = window.innerWidth / 2 - 200; // Center offset X
-let offsetY = window.innerHeight / 2 + 100; // Center offset Y
+let scale = 40;
+let offsetX = window.innerWidth / 2 - 200;
+let offsetY = window.innerHeight / 2 + 100;
 let heightScale = 25;
 
 // ============================================================
-// COORDINATE TRANSFORMATIONS (World -> Screen -> World)
+// COORDINATE TRANSFORMATIONS (World <-> Screen)
 // ============================================================
 
 function worldToScreen(point) {
@@ -55,55 +55,7 @@ function heightToScreen(h) {
 }
 
 // ============================================================
-// VECTOR MATH HELPERS
-// ============================================================
-
-function add(a, b) {
-  return [a[0] + b[0], a[1] + b[1]];
-}
-
-function subtract(a, b) {
-  return [a[0] - b[0], a[1] - b[1]];
-}
-
-function multiply(vector, scalar) {
-  return [vector[0] * scalar, vector[1] * scalar];
-}
-
-function length(v) {
-  return Math.sqrt(v[0] * v[0] + v[1] * v[1]);
-}
-
-function normalize(v) {
-  const len = length(v);
-  return len === 0 ? [0, 0] : [v[0] / len, v[1] / len];
-}
-
-function getWallDirection(wall) {
-  return normalize(subtract(wall.end, wall.start));
-}
-
-function getWallCorners(wall) {
-  const thick = wall.thickness || 0.2;
-  const dir = getWallDirection(wall);
-  const perp = [-dir[1], dir[0]];
-  const offset = multiply(perp, thick / 2);
-
-  return {
-    startLeft: add(wall.start, offset),
-    endLeft: add(wall.end, offset),
-    endRight: subtract(wall.end, offset),
-    startRight: subtract(wall.start, offset)
-  };
-}
-
-function findWall(wallId) {
-  if (!buildingData || !buildingData.walls) return null;
-  return buildingData.walls.find(w => w.id === wallId);
-}
-
-// ============================================================
-// SVG CREATION HELPERS
+// SVG HELPERS
 // ============================================================
 
 function createSVGElement(tag, attrs = {}, parent = null) {
@@ -151,7 +103,7 @@ function createPath(d, className, parent) {
 }
 
 // ============================================================
-// GRID & COORDINATE LABELS
+// GRID & AXES LABELS
 // ============================================================
 
 function drawGrid() {
@@ -160,7 +112,6 @@ function drawGrid() {
   const width = window.innerWidth;
   const height = window.innerHeight;
 
-  // Compute dynamic visible WORLD viewport bounds
   const topLeft = screenToWorld([0, 0]);
   const bottomRight = screenToWorld([width, height]);
 
@@ -170,7 +121,6 @@ function drawGrid() {
   const minY = Math.floor(Math.min(topLeft[1], bottomRight[1])) - 1;
   const maxY = Math.ceil(Math.max(topLeft[1], bottomRight[1])) + 1;
 
-  // Vertical grid lines
   for (let x = minX; x <= maxX; x++) {
     const isMajor = x % 5 === 0;
     const isAxis = x === 0;
@@ -181,7 +131,6 @@ function drawGrid() {
     const line = createLine(p1, p2, null, grid);
     line.setAttribute("class", isAxis ? "axis-y" : isMajor ? "grid-line-major" : "grid-line");
 
-    // X-axis coordinate labels
     if (x % 5 === 0 && !isAxis) {
       const originY = worldToScreen([x, 0])[1];
       const labelText = createText(p1[0], originY + 14, `${x}m`, "axis-label", grid);
@@ -193,7 +142,6 @@ function drawGrid() {
     }
   }
 
-  // Horizontal grid lines
   for (let y = minY; y <= maxY; y++) {
     const isMajor = y % 5 === 0;
     const isAxis = y === 0;
@@ -204,7 +152,6 @@ function drawGrid() {
     const line = createLine(p1, p2, null, grid);
     line.setAttribute("class", isAxis ? "axis-x" : isMajor ? "grid-line-major" : "grid-line");
 
-    // Y-axis coordinate labels
     if (y % 5 === 0 && !isAxis) {
       const originX = worldToScreen([0, y])[0];
       const labelText = createText(originX - 8, p1[1] + 4, `${y}m`, "axis-label", grid);
@@ -216,12 +163,10 @@ function drawGrid() {
     }
   }
 
-  // Origin Marker (0,0)
   const originScreen = worldToScreen([0, 0]);
   const originText = createText(originScreen[0] - 8, originScreen[1] + 16, "(0,0)", "origin-label", grid);
   originText.setAttribute("text-anchor", "end");
 
-  // Axis direction indicators
   const arrowX = worldToScreen([3, 0]);
   createText(arrowX[0] + 10, arrowX[1] + 4, "+X", "origin-label", grid);
 
@@ -230,74 +175,21 @@ function drawGrid() {
 }
 
 // ============================================================
-// ROOM GEOMETRY (Shoelace Area, Perimeter, Polygon Centroid)
+// ROOMS RENDERING (Model Driven)
 // ============================================================
 
-function calculateRoomArea(room) {
-  let area = 0;
-  const pts = room.boundary;
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i];
-    const b = pts[(i + 1) % pts.length];
-    area += a[0] * b[1] - b[0] * a[1];
-  }
-  return Math.abs(area) / 2;
-}
-
-function calculateRoomPerimeter(room) {
-  let perimeter = 0;
-  const pts = room.boundary;
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i];
-    const b = pts[(i + 1) % pts.length];
-    const dx = b[0] - a[0];
-    const dy = b[1] - a[1];
-    perimeter += Math.sqrt(dx * dx + dy * dy);
-  }
-  return perimeter;
-}
-
-function calculateRoomCentroid(room) {
-  const pts = room.boundary;
-  let areaFactor = 0;
-  let cx = 0;
-  let cy = 0;
-
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i];
-    const b = pts[(i + 1) % pts.length];
-    const cross = a[0] * b[1] - b[0] * a[1];
-    areaFactor += cross;
-    cx += (a[0] + b[0]) * cross;
-    cy += (a[1] + b[1]) * cross;
-  }
-
-  const signedArea = areaFactor / 2;
-  if (Math.abs(signedArea) < 0.0001) {
-    // Fallback to vertex average if degenerate
-    let avgX = 0, avgY = 0;
-    for (const pt of pts) { avgX += pt[0]; avgY += pt[1]; }
-    return [avgX / pts.length, avgY / pts.length];
-  }
-
-  return [
-    cx / (6 * signedArea),
-    cy / (6 * signedArea)
-  ];
-}
-
-function drawRooms(data) {
+function drawRooms() {
   rooms.innerHTML = "";
-  if (!data.rooms || viewMode === "simple") return;
+  if (!building || viewMode === "simple") return;
 
-  for (const room of data.rooms) {
+  for (const room of building.getRooms()) {
     const screenPts = room.boundary.map(worldToScreen);
     createPolygon(screenPts, "room-plan", rooms);
 
-    const centroid = calculateRoomCentroid(room);
-    const centerScreen = worldToScreen(centroid);
-    const area = calculateRoomArea(room);
-    const perimeter = calculateRoomPerimeter(room);
+    const center = room.calculateCenter();
+    const centerScreen = worldToScreen(center);
+    const area = room.calculateArea();
+    const perimeter = room.calculatePerimeter();
 
     createText(centerScreen[0], centerScreen[1] - 4, room.name || room.id, "room-label", rooms);
     createText(centerScreen[0], centerScreen[1] + 14, `${area.toFixed(2)} m² • ${perimeter.toFixed(2)} m`, "room-info", rooms);
@@ -305,89 +197,89 @@ function drawRooms(data) {
 }
 
 // ============================================================
-// WALL RENDERING
+// WALL RENDERING (Model Driven)
 // ============================================================
 
 function drawWallSimple(wall) {
-  // Directly render line from start to end (Pure 2D SVG <line>)
   const p1 = worldToScreen(wall.start);
   const p2 = worldToScreen(wall.end);
 
-  createLine(p1, p2, "wall-line-simple", building);
+  createLine(p1, p2, "wall-line-simple", buildingLayer);
 
-  // Endpoint circles
-  createSVGElement("circle", { cx: p1[0], cy: p1[1], r: 4, fill: "#38bdf8" }, building);
-  createSVGElement("circle", { cx: p2[0], cy: p2[1], r: 4, fill: "#38bdf8" }, building);
+  createSVGElement("circle", { cx: p1[0], cy: p1[1], r: 4, fill: "#38bdf8" }, buildingLayer);
+  createSVGElement("circle", { cx: p2[0], cy: p2[1], r: 4, fill: "#38bdf8" }, buildingLayer);
 
-  // Wall ID and length label
-  const wallVec = subtract(wall.end, wall.start);
-  const wallLen = length(wallVec);
-  const mid = [ (wall.start[0] + wall.end[0]) / 2, (wall.start[1] + wall.end[1]) / 2 ];
-  const midScreen = worldToScreen(mid);
-
-  const labelStr = wall.id ? `${wall.id} (${wallLen.toFixed(1)}m)` : `${wallLen.toFixed(1)}m`;
-  createText(midScreen[0], midScreen[1] - 10, labelStr, "wall-line-simple-label", building);
+  const wallLen = wall.getLength();
+  const midScreen = worldToScreen(wall.getMidpoint());
+  const labelStr = `${wall.id || 'wall'} (${wallLen.toFixed(1)}m)`;
+  createText(midScreen[0], midScreen[1] - 10, labelStr, "wall-line-simple-label", buildingLayer);
 }
 
 function drawWallPlan(wall) {
-  // Render 2D top-down wall rectangle with thickness
-  const corners = getWallCorners(wall);
+  const dir = wall.getDirection();
+  const perp = [-dir[1], dir[0]];
+  const offset = [perp[0] * wall.thickness / 2, perp[1] * wall.thickness / 2];
+
+  const startLeft = [wall.start[0] + offset[0], wall.start[1] + offset[1]];
+  const endLeft = [wall.end[0] + offset[0], wall.end[1] + offset[1]];
+  const endRight = [wall.end[0] - offset[0], wall.end[1] - offset[1]];
+  const startRight = [wall.start[0] - offset[0], wall.start[1] - offset[1]];
+
   const polyPts = [
-    worldToScreen(corners.startLeft),
-    worldToScreen(corners.endLeft),
-    worldToScreen(corners.endRight),
-    worldToScreen(corners.startRight)
+    worldToScreen(startLeft),
+    worldToScreen(endLeft),
+    worldToScreen(endRight),
+    worldToScreen(startRight)
   ];
 
-  createPolygon(polyPts, "wall-plan", building);
+  createPolygon(polyPts, "wall-plan", buildingLayer);
 
-  // Centerline
   const p1 = worldToScreen(wall.start);
   const p2 = worldToScreen(wall.end);
-  createLine(p1, p2, "wall-centerline", building);
+  createLine(p1, p2, "wall-centerline", buildingLayer);
 
-  // Wall Label (ID, length, thickness)
-  const mid = [ (wall.start[0] + wall.end[0]) / 2, (wall.start[1] + wall.end[1]) / 2 ];
-  const midScreen = worldToScreen(mid);
-  const wallLen = length(subtract(wall.end, wall.start));
-  const thick = wall.thickness || 0.2;
-  createText(midScreen[0], midScreen[1] - thick * scale / 2 - 6, `${wall.id || 'wall'} • L=${wallLen.toFixed(1)}m • t=${thick}m`, "room-info", building);
+  const midScreen = worldToScreen(wall.getMidpoint());
+  const wallLen = wall.getLength();
+  createText(midScreen[0], midScreen[1] - wall.thickness * scale / 2 - 6, `${wall.id || 'wall'} • L=${wallLen.toFixed(1)}m • t=${wall.thickness}m`, "room-info", buildingLayer);
 }
 
 function drawWallIsometric(wall) {
-  // Extruded 2.5D view (Raised Wall)
-  const corners = getWallCorners(wall);
-  const bSL = worldToScreen(corners.startLeft);
-  const bEL = worldToScreen(corners.endLeft);
-  const bER = worldToScreen(corners.endRight);
-  const bSR = worldToScreen(corners.startRight);
+  const dir = wall.getDirection();
+  const perp = [-dir[1], dir[0]];
+  const offset = [perp[0] * wall.thickness / 2, perp[1] * wall.thickness / 2];
 
-  const wallH = wall.height || 2.8;
-  const h = heightToScreen(wallH);
+  const startLeft = [wall.start[0] + offset[0], wall.start[1] + offset[1]];
+  const endLeft = [wall.end[0] + offset[0], wall.end[1] + offset[1]];
+  const endRight = [wall.end[0] - offset[0], wall.end[1] - offset[1]];
+  const startRight = [wall.start[0] - offset[0], wall.start[1] - offset[1]];
+
+  const bSL = worldToScreen(startLeft);
+  const bEL = worldToScreen(endLeft);
+  const bER = worldToScreen(endRight);
+  const bSR = worldToScreen(startRight);
+
+  const h = heightToScreen(wall.height);
 
   const tSL = [bSL[0], bSL[1] - h];
   const tEL = [bEL[0], bEL[1] - h];
   const tER = [bER[0], bER[1] - h];
   const tSR = [bSR[0], bSR[1] - h];
 
-  // Polygons for front, side, top, other-side
-  createPolygon([bSL, bEL, tEL, tSL], "wall-front", building);
-  createPolygon([bEL, bER, tER, tEL], "wall-side", building);
-  createPolygon([tSL, tEL, tER, tSR], "wall-top", building);
-  createPolygon([bSR, bSL, tSL, tSR], "wall-side", building);
+  createPolygon([bSL, bEL, tEL, tSL], "wall-front", buildingLayer);
+  createPolygon([bEL, bER, tER, tEL], "wall-side", buildingLayer);
+  createPolygon([tSL, tEL, tER, tSR], "wall-top", buildingLayer);
+  createPolygon([bSR, bSL, tSL, tSR], "wall-side", buildingLayer);
 
-  // Midpoint & Wall Label (ID, length, height)
-  const wallLen = length(subtract(wall.end, wall.start));
-  const mid = [ (wall.start[0] + wall.end[0]) / 2, (wall.start[1] + wall.end[1]) / 2 ];
-  const midScreen = worldToScreen(mid);
-  createText(midScreen[0], midScreen[1] - h - 8, `${wall.id || 'wall'} • ${wallLen.toFixed(1)}m long • ${wallH}m high`, "wall-label", building);
+  const wallLen = wall.getLength();
+  const midScreen = worldToScreen(wall.getMidpoint());
+  createText(midScreen[0], midScreen[1] - h - 8, `${wall.id || 'wall'} • ${wallLen.toFixed(1)}m long • ${wall.height}m high`, "wall-label", buildingLayer);
 }
 
-function drawWalls(data) {
-  building.innerHTML = "";
-  if (!data.walls) return;
+function drawWalls() {
+  buildingLayer.innerHTML = "";
+  if (!building) return;
 
-  for (const wall of data.walls) {
+  for (const wall of building.getWalls()) {
     if (viewMode === "simple") {
       drawWallSimple(wall);
     } else if (viewMode === "plan") {
@@ -399,120 +291,114 @@ function drawWalls(data) {
 }
 
 // ============================================================
-// DOORS (Parent-Child Wall-Relative Geometry)
+// DOORS RENDERING (Model Driven)
 // ============================================================
 
-function getDoorPosition(door) {
-  const wall = findWall(door.wallId);
-  if (!wall) return null;
-  const direction = getWallDirection(wall);
-  return add(wall.start, multiply(direction, door.offset));
+function drawDoor(door) {
+  const wall = door.getWall();
+  if (!wall) return;
+
+  const dir = wall.getDirection();
+  const center = door.getPosition();
+  if (!center) return;
+
+  const halfWidth = door.width / 2;
+  const start = [center[0] - dir[0] * halfWidth, center[1] - dir[1] * halfWidth];
+  const end = [center[0] + dir[0] * halfWidth, center[1] + dir[1] * halfWidth];
+
+  const sScreen = worldToScreen(start);
+  const eScreen = worldToScreen(end);
+
+  if (viewMode === "plan") {
+    createLine(sScreen, eScreen, "door-plan", doors);
+
+    const perp = [-dir[1], dir[0]];
+    const doorOpenPt = [start[0] + perp[0] * door.width, start[1] + perp[1] * door.width];
+    const openScreen = worldToScreen(doorOpenPt);
+
+    createLine(sScreen, openScreen, "door-plan", doors);
+
+    const r = door.width * scale;
+    const d = `M ${eScreen[0]} ${eScreen[1]} A ${r} ${r} 0 0 1 ${openScreen[0]} ${openScreen[1]}`;
+    createPath(d, "door-arc", doors);
+
+    const centerScreen = worldToScreen(center);
+    createText(centerScreen[0], centerScreen[1] - 12, `${door.id || 'door'} • ${door.width}m`, "door-label", doors);
+  } else if (viewMode === "isometric") {
+    const h = heightToScreen(door.height);
+    const tStart = [sScreen[0], sScreen[1] - h];
+    const tEnd = [eScreen[0], eScreen[1] - h];
+
+    createPolygon([sScreen, eScreen, tEnd, tStart], "door-panel", doors);
+    const centerScreen = worldToScreen(center);
+    createText(centerScreen[0], centerScreen[1] - h - 6, `${door.id || 'door'} • ${door.width}m`, "door-label", doors);
+  }
 }
 
-function drawDoors(data) {
+function drawDoors() {
   doors.innerHTML = "";
-  if (!data.doors || viewMode === "simple") return;
+  if (!building || viewMode === "simple") return;
 
-  for (const door of data.doors) {
-    const wall = findWall(door.wallId);
-    if (!wall) {
-      console.warn(`Wall not found for door: ${door.wallId}`);
-      continue;
-    }
-
-    const dir = getWallDirection(wall);
-    const center = getDoorPosition(door);
-    if (!center) continue;
-
-    const halfWidth = door.width / 2;
-    const start = subtract(center, multiply(dir, halfWidth));
-    const end = add(center, multiply(dir, halfWidth));
-
-    const sScreen = worldToScreen(start);
-    const eScreen = worldToScreen(end);
-
-    if (viewMode === "plan") {
-      // 2D Plan door swing
-      createLine(sScreen, eScreen, "door-plan", doors);
-
-      // Door panel swing line
-      const perp = [-dir[1], dir[0]];
-      const doorOpenPt = add(start, multiply(perp, door.width));
-      const openScreen = worldToScreen(doorOpenPt);
-
-      createLine(sScreen, openScreen, "door-plan", doors);
-
-      // Arc
-      const r = door.width * scale;
-      const d = `M ${eScreen[0]} ${eScreen[1]} A ${r} ${r} 0 0 1 ${openScreen[0]} ${openScreen[1]}`;
-      createPath(d, "door-arc", doors);
-
-      const centerScreen = worldToScreen(center);
-      createText(centerScreen[0], centerScreen[1] - 12, `${door.id || 'door'} • offset ${door.offset}m`, "door-label", doors);
-    } else if (viewMode === "isometric") {
-      const h = heightToScreen(door.height || 2.1);
-      const tStart = [sScreen[0], sScreen[1] - h];
-      const tEnd = [eScreen[0], eScreen[1] - h];
-
-      // Cutout opening & door panel
-      createPolygon([sScreen, eScreen, tEnd, tStart], "door-panel", doors);
-      const centerScreen = worldToScreen(center);
-      createText(centerScreen[0], centerScreen[1] - h - 6, `${door.id || 'door'} • offset ${door.offset}m`, "door-label", doors);
-    }
+  for (const door of building.getDoors()) {
+    drawDoor(door);
   }
 }
 
 // ============================================================
-// WINDOWS RENDERING
+// WINDOWS RENDERING (Model Driven)
 // ============================================================
 
-function drawWindows(data) {
+function drawWindow(win) {
+  const wall = win.getWall();
+  if (!wall) return;
+
+  const dir = wall.getDirection();
+  const center = win.getPosition();
+  if (!center) return;
+
+  const halfWidth = win.width / 2;
+  const start = [center[0] - dir[0] * halfWidth, center[1] - dir[1] * halfWidth];
+  const end = [center[0] + dir[0] * halfWidth, center[1] + dir[1] * halfWidth];
+
+  const sScreen = worldToScreen(start);
+  const eScreen = worldToScreen(end);
+
+  if (viewMode === "plan") {
+    const perp = [-dir[1], dir[0]];
+    const thick = wall.thickness * 1.2;
+    const off = [perp[0] * thick / 2, perp[1] * thick / 2];
+
+    const p1 = worldToScreen([start[0] + off[0], start[1] + off[1]]);
+    const p2 = worldToScreen([end[0] + off[0], end[1] + off[1]]);
+    const p3 = worldToScreen([end[0] - off[0], end[1] - off[1]]);
+    const p4 = worldToScreen([start[0] - off[0], start[1] - off[1]]);
+
+    createPolygon([p1, p2, p3, p4], "window-plan", windows);
+    createLine(sScreen, eScreen, "window-plan", windows);
+
+    const centerScreen = worldToScreen(center);
+    createText(centerScreen[0], centerScreen[1] - 12, `${win.id || 'win'} • ${win.width}m`, "window-label", windows);
+  } else if (viewMode === "isometric") {
+    const bH = heightToScreen(win.sillHeight);
+    const wH = heightToScreen(win.height);
+
+    const bStart = [sScreen[0], sScreen[1] - bH];
+    const bEnd = [eScreen[0], eScreen[1] - bH];
+    const tStart = [sScreen[0], sScreen[1] - (bH + wH)];
+    const tEnd = [eScreen[0], eScreen[1] - (bH + wH)];
+
+    createPolygon([bStart, bEnd, tEnd, tStart], "window-glass", windows);
+    const centerScreen = worldToScreen(center);
+    createText(centerScreen[0], centerScreen[1] - (bH + wH) - 6, `${win.id || 'win'} • ${win.width}m × ${win.height}m`, "window-label", windows);
+  }
+}
+
+function drawWindows() {
   windows.innerHTML = "";
-  if (!data.windows || viewMode === "simple") return;
+  if (!building || viewMode === "simple") return;
 
-  for (const win of data.windows) {
-    const wall = findWall(win.wallId);
-    if (!wall) continue;
-
-    const dir = getWallDirection(wall);
-    const center = add(wall.start, multiply(dir, win.offset));
-    const halfWidth = win.width / 2;
-
-    const start = subtract(center, multiply(dir, halfWidth));
-    const end = add(center, multiply(dir, halfWidth));
-
-    const sScreen = worldToScreen(start);
-    const eScreen = worldToScreen(end);
-
-    if (viewMode === "plan") {
-      // 2D Plan window cutout
-      const perp = [-dir[1], dir[0]];
-      const thick = (wall.thickness || 0.2) * 1.2;
-      const off = multiply(perp, thick / 2);
-
-      const p1 = worldToScreen(add(start, off));
-      const p2 = worldToScreen(add(end, off));
-      const p3 = worldToScreen(subtract(end, off));
-      const p4 = worldToScreen(subtract(start, off));
-
-      createPolygon([p1, p2, p3, p4], "window-plan", windows);
-      createLine(sScreen, eScreen, "window-plan", windows);
-
-      const centerScreen = worldToScreen(center);
-      createText(centerScreen[0], centerScreen[1] - 12, `${win.id || 'win'} (${win.width}m)`, "window-label", windows);
-    } else if (viewMode === "isometric") {
-      const bH = heightToScreen(win.sillHeight || 0.9);
-      const wH = heightToScreen(win.height || 1.2);
-
-      const bStart = [sScreen[0], sScreen[1] - bH];
-      const bEnd = [eScreen[0], eScreen[1] - bH];
-      const tStart = [sScreen[0], sScreen[1] - (bH + wH)];
-      const tEnd = [eScreen[0], eScreen[1] - (bH + wH)];
-
-      createPolygon([bStart, bEnd, tEnd, tStart], "window-glass", windows);
-      const centerScreen = worldToScreen(center);
-      createText(centerScreen[0], centerScreen[1] - (bH + wH) - 6, `${win.id || 'win'} (${win.width}m)`, "window-label", windows);
-    }
+  for (const win of building.getWindows()) {
+    drawWindow(win);
   }
 }
 
@@ -521,13 +407,13 @@ function drawWindows(data) {
 // ============================================================
 
 function render() {
-  if (!buildingData) return;
+  if (!building) return;
 
   drawGrid();
-  drawRooms(buildingData);
-  drawWalls(buildingData);
-  drawDoors(buildingData);
-  drawWindows(buildingData);
+  drawRooms();
+  drawWalls();
+  drawDoors();
+  drawWindows();
 
   updateCameraHUD();
 }
@@ -537,13 +423,13 @@ function updateCameraHUD() {
   const centerWorld = screenToWorld([window.innerWidth / 2, window.innerHeight / 2]);
   centerVal.textContent = `${centerWorld[0].toFixed(1)}, ${centerWorld[1].toFixed(1)}`;
 
-  if (buildingData && buildingData.walls) {
-    wallCountBadge.textContent = `${buildingData.walls.length} walls`;
+  if (building && building.getWalls()) {
+    wallCountBadge.textContent = `${building.getWalls().length} walls`;
   }
 }
 
 // ============================================================
-// ZOOM & PAN CONTROLS
+// CAMERA INTERACTION (Zoom & Pan)
 // ============================================================
 
 canvas.addEventListener("wheel", (e) => {
@@ -552,7 +438,6 @@ canvas.addEventListener("wheel", (e) => {
   const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
   const newScale = Math.max(10, Math.min(300, scale * zoomFactor));
 
-  // Zoom toward mouse pointer!
   const mouseScreen = [e.clientX, e.clientY];
   const mouseWorld = screenToWorld(mouseScreen);
 
@@ -587,9 +472,8 @@ canvas.addEventListener("mousemove", (e) => {
 canvas.addEventListener("mouseup", () => { dragging = false; });
 canvas.addEventListener("mouseleave", () => { dragging = false; });
 
-// Reset Camera / Fit View
 function fitCamera() {
-  if (!buildingData || !buildingData.walls || buildingData.walls.length === 0) {
+  if (!building || !building.getWalls() || building.getWalls().length === 0) {
     scale = 40;
     offsetX = window.innerWidth / 2;
     offsetY = window.innerHeight / 2;
@@ -600,14 +484,14 @@ function fitCamera() {
   let minX = Infinity, maxX = -Infinity;
   let minY = Infinity, maxY = -Infinity;
 
-  for (const wall of buildingData.walls) {
+  for (const wall of building.getWalls()) {
     minX = Math.min(minX, wall.start[0], wall.end[0]);
     maxX = Math.max(maxX, wall.start[0], wall.end[0]);
     minY = Math.min(minY, wall.start[1], wall.end[1]);
     maxY = Math.max(maxY, wall.start[1], wall.end[1]);
   }
 
-  const padding = 2; // meters
+  const padding = 2;
   const widthM = (maxX - minX) + padding * 2;
   const heightM = (maxY - minY) + padding * 2;
 
@@ -619,7 +503,7 @@ function fitCamera() {
 
   scale = Math.max(15, Math.min(100, Math.min(scaleX, scaleY)));
 
-  const centerM = [ (minX + maxX) / 2, (minY + maxY) / 2 ];
+  const centerM = [(minX + maxX) / 2, (minY + maxY) / 2];
   offsetX = canvasW / 2 - centerM[0] * scale;
   offsetY = canvasH / 2 + centerM[1] * scale;
 
@@ -665,16 +549,16 @@ toggleEditorBtn.addEventListener("click", () => {
 });
 
 // ============================================================
-// LIVE JSON INPUT & VALIDATION
+// LIVE JSON EDITING & VALIDATION PIPELINE
 // ============================================================
 
 function handleJsonInput() {
   const text = jsonInput.value;
 
-  // Run Validator
+  // 1. Validate raw text before constructing Building model
   let errors = [];
-  if (typeof validateBuildingJSON === "function") {
-    errors = validateBuildingJSON(text);
+  if (typeof window.validateBuildingJSON === "function") {
+    errors = window.validateBuildingJSON(text);
   } else {
     try { JSON.parse(text); } catch (e) { errors.push(e.message); }
   }
@@ -683,36 +567,36 @@ function handleJsonInput() {
     statusDot.classList.add("error");
     statusText.textContent = "Invalid JSON";
     errorBanner.style.display = "block";
-    errorBanner.innerHTML = `<strong>JSON Error:</strong> ${errors[0]}`;
+    errorBanner.innerHTML = `<strong>Validation Error:</strong> ${errors[0]}`;
     return;
   }
 
-  // Valid JSON!
+  // 2. Valid JSON -> Parse & Instantiate Building Model
   statusDot.classList.remove("error");
   statusText.textContent = "Valid JSON";
   errorBanner.style.display = "none";
 
   try {
-    buildingData = JSON.parse(text);
+    const data = JSON.parse(text);
+    building = new Building(data);
     render();
   } catch (err) {
-    console.error("Failed to parse JSON", err);
+    console.error("Failed to construct Building model:", err);
   }
 }
 
 jsonInput.addEventListener("input", handleJsonInput);
 
-// Reset JSON to original building.json
 document.getElementById("reset-json-btn").addEventListener("click", () => {
   jsonInput.value = rawJsonText;
   handleJsonInput();
 });
 
 // ============================================================
-// INITIALIZATION
+// INITIALIZATION PIPELINE
 // ============================================================
 
-async function init() {
+async function loadBuilding() {
   try {
     const response = await fetch("building.json");
     if (!response.ok) throw new Error("Could not load building.json");
@@ -720,9 +604,30 @@ async function init() {
     rawJsonText = await response.text();
     jsonInput.value = rawJsonText;
 
-    buildingData = JSON.parse(rawJsonText);
+    // Validate raw text
+    let errors = [];
+    if (typeof window.validateBuildingJSON === "function") {
+      errors = window.validateBuildingJSON(rawJsonText);
+    }
 
-    // Initial positioning
+    if (errors.length > 0) {
+      statusDot.classList.add("error");
+      statusText.textContent = "Invalid JSON";
+      errorBanner.style.display = "block";
+      errorBanner.innerHTML = `<strong>Validation Error:</strong> ${errors[0]}`;
+      return;
+    }
+
+    const data = JSON.parse(rawJsonText);
+
+    // Architectural boundary: JSON -> Building Model instance
+    building = new Building(data);
+
+    console.log("Building model instantiated:", building);
+    console.log("Wall-1 model query:", building.getWall("wall-1"));
+    console.log("Doors on wall-1:", building.getDoorsForWall("wall-1"));
+    console.log("Living Room area calculation:", building.calculateRoomArea("room-1"));
+
     fitCamera();
   } catch (err) {
     console.error(err);
@@ -733,4 +638,4 @@ async function init() {
 
 window.addEventListener("resize", render);
 
-init();
+loadBuilding();
