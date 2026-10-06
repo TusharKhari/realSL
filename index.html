@@ -3,7 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Building 2D CAD Editor with Snapping & Dimensions</title>
+  <title>Building CAD System with 2D, 3D & JSON Editors</title>
+
+  <!-- ES Import Maps for Three.js & OrbitControls -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
 
   <style>
     :root {
@@ -26,19 +36,90 @@
       padding: 0;
     }
 
-    body {
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background-color: var(--bg-color);
       color: var(--text-color);
-      height: 100vh;
-      overflow: hidden;
       display: flex;
       flex-direction: column;
     }
 
+    /* Navigation Bar Tabs */
+    .view-tabs {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      background: #1e293b;
+      border-bottom: 1px solid var(--panel-border);
+      padding: 0 16px;
+      gap: 10px;
+      z-index: 100;
+    }
+
+    .brand-logo {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-right: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .view-tabs button.tab-btn {
+      padding: 7px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #0f172a;
+      color: var(--text-muted);
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .view-tabs button.tab-btn:hover {
+      background: #334155;
+      color: #f8fafc;
+    }
+
+    .view-tabs button.tab-btn.active {
+      background: var(--accent);
+      color: #0f172a;
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* Container Views */
+    .views {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: calc(100vh - 48px);
+    }
+
+    .view {
+      position: absolute;
+      inset: 0;
+      display: none;
+      width: 100%;
+      height: 100%;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    /* 2D Canvas */
     #canvas {
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
       display: block;
       background: #090d16;
       cursor: default;
@@ -88,16 +169,16 @@
     .dim-arrow { fill: #38bdf8; stroke: #38bdf8; }
     .dim-label { font-family: monospace; font-size: 11px; fill: #38bdf8; font-weight: bold; text-anchor: middle; }
 
-    /* Snap Markers & Guide Lines */
+    /* Snap Markers */
     .snap-marker-endpoint { fill: #10b981; stroke: #047857; stroke-width: 2; }
     .snap-marker-intersection { fill: #c084fc; stroke: #7e22ce; stroke-width: 2; }
     .snap-marker-grid { fill: #38bdf8; stroke: #0284c7; stroke-width: 1.5; }
     .snap-angle-guide { stroke: #38bdf8; stroke-width: 1.5; stroke-dasharray: 3 3; }
     .snap-label { font-family: monospace; font-size: 10px; fill: #f8fafc; font-weight: 600; text-anchor: middle; }
 
-    /* Toolbar */
+    /* Toolbars in 2D */
     #toolbar {
-      position: fixed;
+      position: absolute;
       top: 15px;
       left: 15px;
       z-index: 20;
@@ -132,9 +213,8 @@
     #toolbar button.btn-danger { background: rgba(244, 63, 94, 0.2); color: #fecdd3; border-color: #f43f5e; }
     #toolbar button.btn-danger:hover { background: #f43f5e; color: #fff; }
 
-    /* Snapping Toolbar Bar */
     #snap-bar {
-      position: fixed;
+      position: absolute;
       top: 65px;
       left: 15px;
       z-index: 20;
@@ -165,9 +245,8 @@
       cursor: pointer;
     }
 
-    /* Selection Properties Panel */
     #properties {
-      position: fixed;
+      position: absolute;
       right: 15px;
       top: 15px;
       width: 270px;
@@ -216,13 +295,12 @@
       border-color: var(--accent);
     }
 
-    /* Live JSON Panel */
     #json-panel {
-      position: fixed;
+      position: absolute;
       left: 15px;
       bottom: 15px;
       width: 420px;
-      max-height: 250px;
+      max-height: 220px;
       z-index: 20;
       background: var(--panel-bg);
       backdrop-filter: blur(12px);
@@ -248,7 +326,7 @@
     #json-output {
       margin: 0;
       padding: 12px;
-      max-height: 200px;
+      max-height: 170px;
       overflow: auto;
       font-family: "Fira Code", monospace;
       font-size: 11px;
@@ -256,9 +334,8 @@
       background: #090d16;
     }
 
-    /* Status Bar */
     #status {
-      position: fixed;
+      position: absolute;
       bottom: 15px;
       right: 15px;
       padding: 8px 16px;
@@ -271,79 +348,217 @@
       color: var(--text-muted);
       z-index: 20;
     }
+
+    /* 3D View Container & HUD */
+    #canvas-3d {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #0f172a;
+    }
+
+    #hud-3d {
+      position: absolute;
+      right: 15px;
+      top: 15px;
+      z-index: 20;
+      padding: 12px 16px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    #hud-3d strong {
+      color: var(--text-color);
+    }
+
+    /* JSON Editor View */
+    #view-json {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+      background: #090d16;
+    }
+
+    #view-json.active {
+      display: flex;
+    }
+
+    .json-toolbar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      background: #1e293b;
+      border-bottom: 1px solid var(--panel-border);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .json-toolbar span {
+      flex: 1;
+    }
+
+    .json-toolbar button {
+      background: #334155;
+      color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .json-toolbar button:hover {
+      background: var(--accent);
+      color: #0f172a;
+    }
+
+    #json-editor {
+      flex: 1;
+      width: 100%;
+      box-sizing: border-box;
+      resize: none;
+      border: 0;
+      outline: none;
+      padding: 20px;
+      background: #090d16;
+      color: #38bdf8;
+      font-family: "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    #json-error {
+      display: none;
+      min-height: 36px;
+      padding: 8px 16px;
+      box-sizing: border-box;
+      background: rgba(244, 63, 94, 0.15);
+      color: #fecdd3;
+      border-top: 1px solid #f43f5e;
+      font-family: monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 
 <body>
 
-  <!-- Top Toolbar -->
-  <div id="toolbar">
-    <button id="select-tool" class="active" title="Select and inspect elements">👆 Select</button>
-    <button id="pan-tool" title="Pan workspace">✋ Pan</button>
-    <button id="move-tool" title="Move wall on canvas">↔️ Move</button>
-    <button id="new-wall-tool" title="Draw new wall with snapping">➕ New Wall</button>
-    <button id="delete-tool" class="btn-danger" title="Delete selected wall">🗑️ Delete</button>
-
-    <div style="width: 1px; height: 20px; background: var(--panel-border); margin: 0 4px;"></div>
-
-    <span style="font-size: 11px; color: var(--text-muted);">View:</span>
-    <button id="mode-simple-btn">2D Lines</button>
-    <button id="mode-plan-btn">2D Plan</button>
-    <button id="mode-isometric-btn" class="active">2.5D</button>
-
-    <div style="width: 1px; height: 20px; background: var(--panel-border); margin: 0 4px;"></div>
-
-    <span style="font-size: 11px; color: var(--text-muted);">Level:</span>
-    <select id="level-selector" style="background: #334155; color: #f8fafc; border: 1px solid rgba(255,255,255,0.1); padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; outline: none;"></select>
-
-    <div style="width: 1px; height: 20px; background: var(--panel-border); margin: 0 4px;"></div>
-    <a href="3d.html" style="text-decoration:none;"><button type="button" style="background: var(--accent); color: #0f172a; font-weight: bold; cursor: pointer;">🏢 3D View</button></a>
-  </div>
-
-  <!-- Snapping & Dimension Bar -->
-  <div id="snap-bar">
-    <strong style="color: var(--accent);">🧲 Snapping:</strong>
-    <label><input type="checkbox" id="snap-grid-cb" checked> Grid (0.25m)</label>
-    <label><input type="checkbox" id="snap-endpoints-cb" checked> Endpoints</label>
-    <label><input type="checkbox" id="snap-intersections-cb" checked> Intersections</label>
-    <label><input type="checkbox" id="snap-angles-cb" checked> Angles (45°/90°)</label>
-
-    <div style="width: 1px; height: 16px; background: var(--panel-border);"></div>
-    <label><input type="checkbox" id="show-dimensions-cb" checked> CAD Dimensions</label>
-  </div>
-
-  <!-- Selection Property Inspector -->
-  <div id="properties">
-    <h3>Selection</h3>
-    <div id="property-content">Nothing selected.</div>
-  </div>
-
-  <!-- Live Exported JSON Panel -->
-  <div id="json-panel">
-    <div id="json-title">
-      <span>CURRENT BUILDING JSON</span>
-      <span style="font-size: 10px; color: var(--success);">Model Output</span>
+  <!-- Top View Navigation Tabs -->
+  <nav class="view-tabs">
+    <div class="brand-logo">
+      <span>🏛️ Building System</span>
     </div>
-    <pre id="json-output"></pre>
-  </div>
+    <button class="tab-btn active" data-view="2d">📐 2D CAD</button>
+    <button class="tab-btn" data-view="3d">🏢 3D View</button>
+    <button class="tab-btn" data-view="json">{ } JSON Editor</button>
+  </nav>
 
-  <!-- Status Bar -->
-  <div id="status">Ready</div>
+  <!-- Views Container -->
+  <main class="views">
 
-  <!-- Interactive SVG Canvas -->
-  <svg id="canvas">
-    <g id="camera">
-      <g id="grid"></g>
-      <g id="rooms"></g>
-      <g id="building"></g>
-      <g id="doors"></g>
-      <g id="windows"></g>
-      <g id="dimensions"></g>
-      <g id="selection"></g>
-      <g id="new-wall-preview"></g>
-      <g id="snap-indicators"></g>
-    </g>
-  </svg>
+    <!-- 2D View -->
+    <section id="view-2d" class="view active">
+      <!-- Top Toolbar -->
+      <div id="toolbar">
+        <button id="select-tool" class="active" title="Select and inspect elements">👆 Select</button>
+        <button id="pan-tool" title="Pan workspace">✋ Pan</button>
+        <button id="move-tool" title="Move wall on canvas">↔️ Move</button>
+        <button id="new-wall-tool" title="Draw new wall with snapping">➕ New Wall</button>
+        <button id="delete-tool" class="btn-danger" title="Delete selected wall">🗑️ Delete</button>
+
+        <div style="width: 1px; height: 20px; background: var(--panel-border); margin: 0 4px;"></div>
+
+        <span style="font-size: 11px; color: var(--text-muted);">View:</span>
+        <button id="mode-simple-btn">2D Lines</button>
+        <button id="mode-plan-btn">2D Plan</button>
+        <button id="mode-isometric-btn" class="active">2.5D</button>
+
+        <div style="width: 1px; height: 20px; background: var(--panel-border); margin: 0 4px;"></div>
+
+        <span style="font-size: 11px; color: var(--text-muted);">Level:</span>
+        <select id="level-selector" style="background: #334155; color: #f8fafc; border: 1px solid rgba(255,255,255,0.1); padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; outline: none;"></select>
+      </div>
+
+      <!-- Snapping & Dimension Bar -->
+      <div id="snap-bar">
+        <strong style="color: var(--accent);">🧲 Snapping:</strong>
+        <label><input type="checkbox" id="snap-grid-cb" checked> Grid (0.25m)</label>
+        <label><input type="checkbox" id="snap-endpoints-cb" checked> Endpoints</label>
+        <label><input type="checkbox" id="snap-intersections-cb" checked> Intersections</label>
+        <label><input type="checkbox" id="snap-angles-cb" checked> Angles (45°/90°)</label>
+
+        <div style="width: 1px; height: 16px; background: var(--panel-border);"></div>
+        <label><input type="checkbox" id="show-dimensions-cb" checked> CAD Dimensions</label>
+      </div>
+
+      <!-- Selection Property Inspector -->
+      <div id="properties">
+        <h3>Selection</h3>
+        <div id="property-content">Nothing selected.</div>
+      </div>
+
+      <!-- Live Exported JSON Panel -->
+      <div id="json-panel">
+        <div id="json-title">
+          <span>CURRENT BUILDING JSON</span>
+          <span style="font-size: 10px; color: var(--success);">Model Output</span>
+        </div>
+        <pre id="json-output"></pre>
+      </div>
+
+      <!-- Status Bar -->
+      <div id="status">Ready</div>
+
+      <!-- Interactive SVG Canvas -->
+      <svg id="canvas">
+        <g id="camera">
+          <g id="grid"></g>
+          <g id="rooms"></g>
+          <g id="building"></g>
+          <g id="doors"></g>
+          <g id="windows"></g>
+          <g id="dimensions"></g>
+          <g id="selection"></g>
+          <g id="new-wall-preview"></g>
+          <g id="snap-indicators"></g>
+        </g>
+      </svg>
+    </section>
+
+    <!-- 3D View -->
+    <section id="view-3d" class="view">
+      <div id="canvas-3d"></div>
+      <div id="hud-3d">
+        <strong>3D Camera Controls:</strong><br>
+        • Left Click + Drag = Orbit Rotate<br>
+        • Right Click + Drag = Pan Camera<br>
+        • Scroll Wheel = Zoom
+      </div>
+    </section>
+
+    <!-- JSON Editor View -->
+    <section id="view-json" class="view">
+      <div class="json-toolbar">
+        <span>Building JSON Source of Truth (building.json)</span>
+        <button id="format-json">Format</button>
+        <button id="apply-json">Apply</button>
+      </div>
+      <textarea id="json-editor" spellcheck="false"></textarea>
+      <div id="json-error"></div>
+    </section>
+
+  </main>
 
   <script type="module" src="./app.js"></script>
 

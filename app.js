@@ -3,6 +3,9 @@ import { validateBuildingJSON } from "./validator.js";
 import { SnapManager } from "./editor/SnapManager.js";
 import { Dimension } from "./model/Dimension.js";
 import { distance } from "./model/Geometry.js";
+import { JsonEditor } from "./editor/JsonEditor.js";
+import { Application } from "./app/Application.js";
+import { Scene3D } from "./3d/Scene3D.js";
 
 // ============================================================
 // DOM ELEMENTS
@@ -38,6 +41,10 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // ============================================================
 
 let building = null;
+let scene3D = null;
+let jsonEditor = null;
+let application = null;
+
 const snapManager = new SnapManager({ gridSize: 0.25, snapDistance: 0.35 });
 
 let selectedWallId = null;
@@ -590,7 +597,11 @@ function addNumberInput(label, value, onChange) {
 function afterModelChange() {
   updateProperties();
   updateJSON();
-  render();
+  if (application && building) {
+    application.setBuilding(building, building.toJSON(), "2d");
+  } else {
+    render();
+  }
 }
 
 function updateJSON() {
@@ -971,6 +982,87 @@ async function loadBuilding() {
     const data = JSON.parse(jsonText);
     building = new Building(data);
 
+    // Initialize JSON Editor
+    const jsonEditorTextArea = document.getElementById("json-editor");
+    const jsonErrorElement = document.getElementById("json-error");
+
+    jsonEditor = new JsonEditor({
+      textarea: jsonEditorTextArea,
+      errorElement: jsonErrorElement,
+      onBuildingChanged: (newBuilding, json) => {
+        building = newBuilding;
+        populateLevelSelector();
+        updateStatus("Building model updated from JSON Editor");
+        if (application) {
+          application.setBuilding(newBuilding, json, "jsonEditor");
+        } else {
+          render();
+        }
+      }
+    });
+
+    jsonEditor.setBuilding(data);
+
+    // Initialize Application controller
+    application = new Application({
+      renderer2D: {
+        render: () => render()
+      },
+      renderer3D: {
+        refresh: () => {
+          if (scene3D) scene3D.refresh();
+        }
+      },
+      jsonEditor: jsonEditor
+    });
+
+    application.setBuilding(building, data, "init");
+
+    // JSON Toolbar Actions
+    const formatBtn = document.getElementById("format-json");
+    if (formatBtn) {
+      formatBtn.addEventListener("click", () => jsonEditor.format());
+    }
+
+    const applyBtn = document.getElementById("apply-json");
+    if (applyBtn) {
+      applyBtn.addEventListener("click", () => jsonEditor.handleInput());
+    }
+
+    // Navigation View Tabs Switcher (2D, 3D, JSON)
+    const tabBtns = document.querySelectorAll(".view-tabs .tab-btn");
+    const views = document.querySelectorAll(".views .view");
+
+    tabBtns.forEach(tab => {
+      tab.addEventListener("click", () => {
+        const selected = tab.dataset.view;
+
+        tabBtns.forEach(t => t.classList.toggle("active", t === tab));
+        views.forEach(view => {
+          view.classList.toggle("active", view.id === `view-${selected}`);
+        });
+
+        if (selected === "3d") {
+          if (!scene3D) {
+            const container3d = document.getElementById("canvas-3d");
+            scene3D = new Scene3D(container3d, building);
+          } else {
+            scene3D.resize();
+            scene3D.refresh();
+          }
+          updateStatus("3D WebGL View Active");
+        } else if (selected === "json") {
+          if (jsonEditor && building) {
+            jsonEditor.setBuilding(building.toJSON());
+          }
+          updateStatus("JSON Editor Active");
+        } else if (selected === "2d") {
+          render();
+          updateStatus(`Active Level: ${activeLevelId || 'ground-floor'}`);
+        }
+      });
+    });
+
     populateLevelSelector();
     updateStatus(`Multi-Level Building Model Loaded (${building.getLevels().length} levels)`);
     render();
@@ -980,5 +1072,8 @@ async function loadBuilding() {
   }
 }
 
-window.addEventListener("resize", render);
+window.addEventListener("resize", () => {
+  render();
+  if (scene3D) scene3D.resize();
+});
 loadBuilding();
