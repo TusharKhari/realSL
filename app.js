@@ -1,8 +1,9 @@
-// ============================================================
-// BUILDING RENDERER (MODEL-DRIVEN ES MODULE)
-// ============================================================
-
 import { Building } from "./model/Building.js";
+import { validateBuildingJSON } from "./validator.js";
+
+// ============================================================
+// DOM ELEMENTS
+// ============================================================
 
 const canvas = document.getElementById("canvas");
 const grid = document.getElementById("grid");
@@ -10,30 +11,46 @@ const rooms = document.getElementById("rooms");
 const buildingLayer = document.getElementById("building");
 const doors = document.getElementById("doors");
 const windows = document.getElementById("windows");
+const selectionLayer = document.getElementById("selection");
+const newWallPreview = document.getElementById("new-wall-preview");
 
-const jsonInput = document.getElementById("json-input");
-const statusDot = document.getElementById("status-dot");
-const statusText = document.getElementById("status-text");
-const wallCountBadge = document.getElementById("wall-count-badge");
-const errorBanner = document.getElementById("error-banner");
-const scaleVal = document.getElementById("scale-val");
-const centerVal = document.getElementById("center-val");
+const propertyContent = document.getElementById("property-content");
+const jsonOutput = document.getElementById("json-output");
+const status = document.getElementById("status");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-// State
-let building = null; // Building model instance
-let rawJsonText = "";
-let viewMode = "simple"; // "simple", "plan", "isometric"
+// ============================================================
+// STATE
+// ============================================================
 
-// Camera State
-let scale = 40;
+let building = null;
+let selectedWallId = null;
+let tool = "select"; // "select", "pan", "move", "new-wall"
+let viewMode = "isometric"; // "simple", "plan", "isometric"
+
+// Camera
+let scale = 45;
 let offsetX = window.innerWidth / 2 - 200;
 let offsetY = window.innerHeight / 2 + 100;
-let heightScale = 25;
+const heightScale = 30;
+
+// Drag State
+let draggingWall = false;
+let dragStartWorld = null;
+let dragOriginalStart = null;
+let dragOriginalEnd = null;
+
+// Pan State
+let panning = false;
+let panStartX = 0;
+let panStartY = 0;
+
+// New Wall State
+let newWallStart = null;
 
 // ============================================================
-// COORDINATE TRANSFORMATIONS (World <-> Screen)
+// TRANSFORMATIONS (World <-> Screen)
 // ============================================================
 
 function worldToScreen(point) {
@@ -43,10 +60,10 @@ function worldToScreen(point) {
   ];
 }
 
-function screenToWorld(pixel) {
+function screenToWorld(screenX, screenY) {
   return [
-    (pixel[0] - offsetX) / scale,
-    (offsetY - pixel[1]) / scale
+    (screenX - offsetX) / scale,
+    (offsetY - screenY) / scale
   ];
 }
 
@@ -58,17 +75,25 @@ function heightToScreen(h) {
 // SVG HELPERS
 // ============================================================
 
-function createSVGElement(tag, attrs = {}, parent = null) {
-  const elem = document.createElementNS(SVG_NS, tag);
-  for (const [key, val] of Object.entries(attrs)) {
-    elem.setAttribute(key, val);
+function createElement(type, attrs = {}, parent = null) {
+  const elem = document.createElementNS(SVG_NS, type);
+  for (const [k, v] of Object.entries(attrs)) {
+    elem.setAttribute(k, v);
   }
   if (parent) parent.appendChild(elem);
   return elem;
 }
 
+function createPolygon(points, className, parent) {
+  const poly = createElement("polygon", {
+    points: points.map(p => `${p[0]},${p[1]}`).join(" ")
+  }, parent);
+  if (className) poly.setAttribute("class", className);
+  return poly;
+}
+
 function createLine(p1, p2, className, parent) {
-  const line = createSVGElement("line", {
+  const line = createElement("line", {
     x1: p1[0],
     y1: p1[1],
     x2: p2[0],
@@ -78,32 +103,15 @@ function createLine(p1, p2, className, parent) {
   return line;
 }
 
-function createPolygon(points, className, parent) {
-  const poly = createSVGElement("polygon", {
-    points: points.map(p => `${p[0]},${p[1]}`).join(" ")
-  }, parent);
-  if (className) poly.setAttribute("class", className);
-  return poly;
-}
-
 function createText(x, y, text, className, parent) {
-  const elem = createSVGElement("text", {
-    x: x,
-    y: y
-  }, parent);
+  const elem = createElement("text", { x: x, y: y }, parent);
   if (className) elem.setAttribute("class", className);
   elem.textContent = text;
   return elem;
 }
 
-function createPath(d, className, parent) {
-  const path = createSVGElement("path", { d: d }, parent);
-  if (className) path.setAttribute("class", className);
-  return path;
-}
-
 // ============================================================
-// GRID & AXES LABELS
+// GRID & AXES
 // ============================================================
 
 function drawGrid() {
@@ -112,12 +120,11 @@ function drawGrid() {
   const width = window.innerWidth;
   const height = window.innerHeight;
 
-  const topLeft = screenToWorld([0, 0]);
-  const bottomRight = screenToWorld([width, height]);
+  const topLeft = screenToWorld(0, 0);
+  const bottomRight = screenToWorld(width, height);
 
   const minX = Math.floor(Math.min(topLeft[0], bottomRight[0])) - 1;
   const maxX = Math.ceil(Math.max(topLeft[0], bottomRight[0])) + 1;
-
   const minY = Math.floor(Math.min(topLeft[1], bottomRight[1])) - 1;
   const maxY = Math.ceil(Math.max(topLeft[1], bottomRight[1])) + 1;
 
@@ -134,10 +141,6 @@ function drawGrid() {
     if (x % 5 === 0 && !isAxis) {
       const originY = worldToScreen([x, 0])[1];
       const labelText = createText(p1[0], originY + 14, `${x}m`, "axis-label", grid);
-      labelText.setAttribute("text-anchor", "middle");
-    } else if (!isAxis && scale >= 30) {
-      const originY = worldToScreen([x, 0])[1];
-      const labelText = createText(p1[0], originY + 14, `${x}`, "axis-label", grid);
       labelText.setAttribute("text-anchor", "middle");
     }
   }
@@ -156,26 +159,16 @@ function drawGrid() {
       const originX = worldToScreen([0, y])[0];
       const labelText = createText(originX - 8, p1[1] + 4, `${y}m`, "axis-label", grid);
       labelText.setAttribute("text-anchor", "end");
-    } else if (!isAxis && scale >= 30) {
-      const originX = worldToScreen([0, y])[0];
-      const labelText = createText(originX - 8, p1[1] + 4, `${y}`, "axis-label", grid);
-      labelText.setAttribute("text-anchor", "end");
     }
   }
 
   const originScreen = worldToScreen([0, 0]);
   const originText = createText(originScreen[0] - 8, originScreen[1] + 16, "(0,0)", "origin-label", grid);
   originText.setAttribute("text-anchor", "end");
-
-  const arrowX = worldToScreen([3, 0]);
-  createText(arrowX[0] + 10, arrowX[1] + 4, "+X", "origin-label", grid);
-
-  const arrowY = worldToScreen([0, 3]);
-  createText(arrowY[0] - 14, arrowY[1] - 8, "+Y", "origin-label", grid);
 }
 
 // ============================================================
-// ROOMS RENDERING (Model Driven)
+// ROOMS RENDERING
 // ============================================================
 
 function drawRooms() {
@@ -183,96 +176,96 @@ function drawRooms() {
   if (!building || viewMode === "simple") return;
 
   for (const room of building.getRooms()) {
-    const screenPts = room.boundary.map(worldToScreen);
-    createPolygon(screenPts, "room-plan", rooms);
+    const points = room.boundary.map(worldToScreen);
+    createPolygon(points, "room-plan", rooms);
 
     const center = room.calculateCenter();
-    const centerScreen = worldToScreen(center);
-    const area = room.calculateArea();
-    const perimeter = room.calculatePerimeter();
+    const screen = worldToScreen(center);
 
-    createText(centerScreen[0], centerScreen[1] - 4, room.name || room.id, "room-label", rooms);
-    createText(centerScreen[0], centerScreen[1] + 14, `${area.toFixed(2)} m² • ${perimeter.toFixed(2)} m`, "room-info", rooms);
+    createText(screen[0], screen[1] - 4, room.name || room.id, "room-label", rooms);
+    createText(screen[0], screen[1] + 14, `${room.calculateArea().toFixed(2)} m²`, "room-info", rooms);
   }
 }
 
 // ============================================================
-// WALL RENDERING (Model Driven)
+// WALL GEOMETRY & RENDERING
 // ============================================================
 
-function drawWallSimple(wall) {
-  const p1 = worldToScreen(wall.start);
-  const p2 = worldToScreen(wall.end);
+function getWallCorners(wall) {
+  const direction = wall.getDirection();
+  const perpendicular = [-direction[1], direction[0]];
+  const offset = [perpendicular[0] * wall.thickness / 2, perpendicular[1] * wall.thickness / 2];
 
-  createLine(p1, p2, "wall-line-simple", buildingLayer);
-
-  createSVGElement("circle", { cx: p1[0], cy: p1[1], r: 4, fill: "#38bdf8" }, buildingLayer);
-  createSVGElement("circle", { cx: p2[0], cy: p2[1], r: 4, fill: "#38bdf8" }, buildingLayer);
-
-  const wallLen = wall.getLength();
-  const midScreen = worldToScreen(wall.getMidpoint());
-  const labelStr = `${wall.id || 'wall'} (${wallLen.toFixed(1)}m)`;
-  createText(midScreen[0], midScreen[1] - 10, labelStr, "wall-line-simple-label", buildingLayer);
+  return {
+    startLeft: [wall.start[0] + offset[0], wall.start[1] + offset[1]],
+    endLeft: [wall.end[0] + offset[0], wall.end[1] + offset[1]],
+    endRight: [wall.end[0] - offset[0], wall.end[1] - offset[1]],
+    startRight: [wall.start[0] - offset[0], wall.start[1] - offset[1]]
+  };
 }
 
-function drawWallPlan(wall) {
-  const dir = wall.getDirection();
-  const perp = [-dir[1], dir[0]];
-  const offset = [perp[0] * wall.thickness / 2, perp[1] * wall.thickness / 2];
+function drawWall(wall) {
+  const isSelected = wall.id === selectedWallId;
 
-  const startLeft = [wall.start[0] + offset[0], wall.start[1] + offset[1]];
-  const endLeft = [wall.end[0] + offset[0], wall.end[1] + offset[1]];
-  const endRight = [wall.end[0] - offset[0], wall.end[1] - offset[1]];
-  const startRight = [wall.start[0] - offset[0], wall.start[1] - offset[1]];
+  if (viewMode === "simple") {
+    const p1 = worldToScreen(wall.start);
+    const p2 = worldToScreen(wall.end);
+    const line = createLine(p1, p2, isSelected ? "wall-selected" : "wall-line-simple", buildingLayer);
+    line.style.cursor = (tool === "select" || tool === "move") ? "pointer" : "default";
 
-  const polyPts = [
-    worldToScreen(startLeft),
-    worldToScreen(endLeft),
-    worldToScreen(endRight),
-    worldToScreen(startRight)
-  ];
+    const midScreen = worldToScreen(wall.getMidpoint());
+    createText(midScreen[0], midScreen[1] - 10, `${wall.id} (${wall.getLength().toFixed(1)}m)`, "wall-label", buildingLayer);
+    return;
+  }
 
-  createPolygon(polyPts, "wall-plan", buildingLayer);
+  if (viewMode === "plan") {
+    const corners = getWallCorners(wall);
+    const polyPts = [
+      worldToScreen(corners.startLeft),
+      worldToScreen(corners.endLeft),
+      worldToScreen(corners.endRight),
+      worldToScreen(corners.startRight)
+    ];
 
-  const p1 = worldToScreen(wall.start);
-  const p2 = worldToScreen(wall.end);
-  createLine(p1, p2, "wall-centerline", buildingLayer);
+    const poly = createPolygon(polyPts, isSelected ? "wall-selected" : "wall-plan", buildingLayer);
+    poly.style.cursor = (tool === "select" || tool === "move") ? "pointer" : "default";
 
-  const midScreen = worldToScreen(wall.getMidpoint());
-  const wallLen = wall.getLength();
-  createText(midScreen[0], midScreen[1] - wall.thickness * scale / 2 - 6, `${wall.id || 'wall'} • L=${wallLen.toFixed(1)}m • t=${wall.thickness}m`, "room-info", buildingLayer);
-}
+    const p1 = worldToScreen(wall.start);
+    const p2 = worldToScreen(wall.end);
+    createLine(p1, p2, "wall-centerline", buildingLayer);
 
-function drawWallIsometric(wall) {
-  const dir = wall.getDirection();
-  const perp = [-dir[1], dir[0]];
-  const offset = [perp[0] * wall.thickness / 2, perp[1] * wall.thickness / 2];
+    const midScreen = worldToScreen(wall.getMidpoint());
+    createText(midScreen[0], midScreen[1] - 12, `${wall.id} (${wall.getLength().toFixed(1)}m)`, "wall-label", buildingLayer);
+    return;
+  }
 
-  const startLeft = [wall.start[0] + offset[0], wall.start[1] + offset[1]];
-  const endLeft = [wall.end[0] + offset[0], wall.end[1] + offset[1]];
-  const endRight = [wall.end[0] - offset[0], wall.end[1] - offset[1]];
-  const startRight = [wall.start[0] - offset[0], wall.start[1] - offset[1]];
+  // 2.5D Isometric Mode
+  const corners = getWallCorners(wall);
+  const bSL = worldToScreen(corners.startLeft);
+  const bEL = worldToScreen(corners.endLeft);
+  const bER = worldToScreen(corners.endRight);
+  const bSR = worldToScreen(corners.startRight);
 
-  const bSL = worldToScreen(startLeft);
-  const bEL = worldToScreen(endLeft);
-  const bER = worldToScreen(endRight);
-  const bSR = worldToScreen(startRight);
+  const height = heightToScreen(wall.height);
 
-  const h = heightToScreen(wall.height);
+  const tSL = [bSL[0], bSL[1] - height];
+  const tEL = [bEL[0], bEL[1] - height];
+  const tER = [bER[0], bER[1] - height];
+  const tSR = [bSR[0], bSR[1] - height];
 
-  const tSL = [bSL[0], bSL[1] - h];
-  const tEL = [bEL[0], bEL[1] - h];
-  const tER = [bER[0], bER[1] - h];
-  const tSR = [bSR[0], bSR[1] - h];
+  const frontCls = isSelected ? "wall-selected" : "wall-front";
+  const sideCls = isSelected ? "wall-selected" : "wall-side";
+  const topCls = isSelected ? "wall-selected" : "wall-top";
 
-  createPolygon([bSL, bEL, tEL, tSL], "wall-front", buildingLayer);
-  createPolygon([bEL, bER, tER, tEL], "wall-side", buildingLayer);
-  createPolygon([tSL, tEL, tER, tSR], "wall-top", buildingLayer);
-  createPolygon([bSR, bSL, tSL, tSR], "wall-side", buildingLayer);
+  const front = createPolygon([bSL, bEL, tEL, tSL], frontCls, buildingLayer);
+  const side = createPolygon([bEL, bER, tER, tEL], sideCls, buildingLayer);
+  createPolygon([tSL, tEL, tER, tSR], topCls, buildingLayer);
+  createPolygon([bSR, bSL, tSL, tSR], sideCls, buildingLayer);
 
-  const wallLen = wall.getLength();
-  const midScreen = worldToScreen(wall.getMidpoint());
-  createText(midScreen[0], midScreen[1] - h - 8, `${wall.id || 'wall'} • ${wallLen.toFixed(1)}m long • ${wall.height}m high`, "wall-label", buildingLayer);
+  front.style.cursor = (tool === "select" || tool === "move") ? "pointer" : "default";
+
+  const midpointScreen = worldToScreen(wall.getMidpoint());
+  createText(midpointScreen[0], midpointScreen[1] - height - 8, `${wall.id} • ${wall.getLength().toFixed(2)}m`, "wall-label", buildingLayer);
 }
 
 function drawWalls() {
@@ -280,116 +273,48 @@ function drawWalls() {
   if (!building) return;
 
   for (const wall of building.getWalls()) {
-    if (viewMode === "simple") {
-      drawWallSimple(wall);
-    } else if (viewMode === "plan") {
-      drawWallPlan(wall);
-    } else if (viewMode === "isometric") {
-      drawWallIsometric(wall);
-    }
+    drawWall(wall);
   }
 }
 
 // ============================================================
-// DOORS RENDERING (Model Driven)
+// DOORS & WINDOWS RENDERING
 // ============================================================
-
-function drawDoor(door) {
-  const wall = door.getWall();
-  if (!wall) return;
-
-  const dir = wall.getDirection();
-  const center = door.getPosition();
-  if (!center) return;
-
-  const halfWidth = door.width / 2;
-  const start = [center[0] - dir[0] * halfWidth, center[1] - dir[1] * halfWidth];
-  const end = [center[0] + dir[0] * halfWidth, center[1] + dir[1] * halfWidth];
-
-  const sScreen = worldToScreen(start);
-  const eScreen = worldToScreen(end);
-
-  if (viewMode === "plan") {
-    createLine(sScreen, eScreen, "door-plan", doors);
-
-    const perp = [-dir[1], dir[0]];
-    const doorOpenPt = [start[0] + perp[0] * door.width, start[1] + perp[1] * door.width];
-    const openScreen = worldToScreen(doorOpenPt);
-
-    createLine(sScreen, openScreen, "door-plan", doors);
-
-    const r = door.width * scale;
-    const d = `M ${eScreen[0]} ${eScreen[1]} A ${r} ${r} 0 0 1 ${openScreen[0]} ${openScreen[1]}`;
-    createPath(d, "door-arc", doors);
-
-    const centerScreen = worldToScreen(center);
-    createText(centerScreen[0], centerScreen[1] - 12, `${door.id || 'door'} • ${door.width}m`, "door-label", doors);
-  } else if (viewMode === "isometric") {
-    const h = heightToScreen(door.height);
-    const tStart = [sScreen[0], sScreen[1] - h];
-    const tEnd = [eScreen[0], eScreen[1] - h];
-
-    createPolygon([sScreen, eScreen, tEnd, tStart], "door-panel", doors);
-    const centerScreen = worldToScreen(center);
-    createText(centerScreen[0], centerScreen[1] - h - 6, `${door.id || 'door'} • ${door.width}m`, "door-label", doors);
-  }
-}
 
 function drawDoors() {
   doors.innerHTML = "";
   if (!building || viewMode === "simple") return;
 
   for (const door of building.getDoors()) {
-    drawDoor(door);
-  }
-}
+    const wall = door.getWall();
+    if (!wall) continue;
 
-// ============================================================
-// WINDOWS RENDERING (Model Driven)
-// ============================================================
+    const center = door.getPosition();
+    if (!center) continue;
 
-function drawWindow(win) {
-  const wall = win.getWall();
-  if (!wall) return;
+    const direction = wall.getDirection();
+    const halfWidth = door.width / 2;
 
-  const dir = wall.getDirection();
-  const center = win.getPosition();
-  if (!center) return;
+    const start = [center[0] - direction[0] * halfWidth, center[1] - direction[1] * halfWidth];
+    const end = [center[0] + direction[0] * halfWidth, center[1] + direction[1] * halfWidth];
 
-  const halfWidth = win.width / 2;
-  const start = [center[0] - dir[0] * halfWidth, center[1] - dir[1] * halfWidth];
-  const end = [center[0] + dir[0] * halfWidth, center[1] + dir[1] * halfWidth];
+    const startScreen = worldToScreen(start);
+    const endScreen = worldToScreen(end);
 
-  const sScreen = worldToScreen(start);
-  const eScreen = worldToScreen(end);
+    if (viewMode === "plan") {
+      createLine(startScreen, endScreen, "door-plan", doors);
+      const perp = [-direction[1], direction[0]];
+      const doorOpenPt = [start[0] + perp[0] * door.width, start[1] + perp[1] * door.width];
+      const openScreen = worldToScreen(doorOpenPt);
+      createLine(startScreen, openScreen, "door-plan", doors);
 
-  if (viewMode === "plan") {
-    const perp = [-dir[1], dir[0]];
-    const thick = wall.thickness * 1.2;
-    const off = [perp[0] * thick / 2, perp[1] * thick / 2];
-
-    const p1 = worldToScreen([start[0] + off[0], start[1] + off[1]]);
-    const p2 = worldToScreen([end[0] + off[0], end[1] + off[1]]);
-    const p3 = worldToScreen([end[0] - off[0], end[1] - off[1]]);
-    const p4 = worldToScreen([start[0] - off[0], start[1] - off[1]]);
-
-    createPolygon([p1, p2, p3, p4], "window-plan", windows);
-    createLine(sScreen, eScreen, "window-plan", windows);
-
-    const centerScreen = worldToScreen(center);
-    createText(centerScreen[0], centerScreen[1] - 12, `${win.id || 'win'} • ${win.width}m`, "window-label", windows);
-  } else if (viewMode === "isometric") {
-    const bH = heightToScreen(win.sillHeight);
-    const wH = heightToScreen(win.height);
-
-    const bStart = [sScreen[0], sScreen[1] - bH];
-    const bEnd = [eScreen[0], eScreen[1] - bH];
-    const tStart = [sScreen[0], sScreen[1] - (bH + wH)];
-    const tEnd = [eScreen[0], eScreen[1] - (bH + wH)];
-
-    createPolygon([bStart, bEnd, tEnd, tStart], "window-glass", windows);
-    const centerScreen = worldToScreen(center);
-    createText(centerScreen[0], centerScreen[1] - (bH + wH) - 6, `${win.id || 'win'} • ${win.width}m × ${win.height}m`, "window-label", windows);
+      const r = door.width * scale;
+      const d = `M ${endScreen[0]} ${endScreen[1]} A ${r} ${r} 0 0 1 ${openScreen[0]} ${openScreen[1]}`;
+      createElement("path", { d: d, class: "door-arc" }, doors);
+    } else {
+      const height = heightToScreen(door.height);
+      createPolygon([startScreen, endScreen, [endScreen[0], endScreen[1] - height], [startScreen[0], startScreen[1] - height]], "door-panel", doors);
+    }
   }
 }
 
@@ -397,132 +322,369 @@ function drawWindows() {
   windows.innerHTML = "";
   if (!building || viewMode === "simple") return;
 
-  for (const win of building.getWindows()) {
-    drawWindow(win);
+  for (const window of building.getWindows()) {
+    const wall = window.getWall();
+    if (!wall) continue;
+
+    const center = window.getPosition();
+    if (!center) continue;
+
+    const direction = wall.getDirection();
+    const halfWidth = window.width / 2;
+
+    const start = [center[0] - direction[0] * halfWidth, center[1] - direction[1] * halfWidth];
+    const end = [center[0] + direction[0] * halfWidth, center[1] + direction[1] * halfWidth];
+
+    const startScreen = worldToScreen(start);
+    const endScreen = worldToScreen(end);
+
+    if (viewMode === "plan") {
+      const perp = [-direction[1], direction[0]];
+      const thick = wall.thickness * 1.2;
+      const off = [perp[0] * thick / 2, perp[1] * thick / 2];
+
+      const p1 = worldToScreen([start[0] + off[0], start[1] + off[1]]);
+      const p2 = worldToScreen([end[0] + off[0], end[1] + off[1]]);
+      const p3 = worldToScreen([end[0] - off[0], end[1] - off[1]]);
+      const p4 = worldToScreen([start[0] - off[0], start[1] - off[1]]);
+
+      createPolygon([p1, p2, p3, p4], "window-opening", windows);
+      createLine(startScreen, endScreen, "window-opening", windows);
+    } else {
+      const sill = heightToScreen(window.sillHeight);
+      const height = heightToScreen(window.height);
+
+      createPolygon([
+        [startScreen[0], startScreen[1] - sill],
+        [endScreen[0], endScreen[1] - sill],
+        [endScreen[0], endScreen[1] - sill - height],
+        [startScreen[0], startScreen[1] - sill - height]
+      ], "window-glass", windows);
+    }
   }
 }
 
 // ============================================================
-// MAIN RENDER CONTROLLER
+// SELECTION & PROPERTY INSPECTOR
 // ============================================================
 
-function render() {
-  if (!building) return;
-
-  drawGrid();
-  drawRooms();
-  drawWalls();
-  drawDoors();
-  drawWindows();
-
-  updateCameraHUD();
+function selectWall(id) {
+  selectedWallId = id;
+  updateProperties();
+  updateStatus(`Selected ${id}`);
+  render();
 }
 
-function updateCameraHUD() {
-  scaleVal.textContent = `${Math.round(scale)}px/m`;
-  const centerWorld = screenToWorld([window.innerWidth / 2, window.innerHeight / 2]);
-  centerVal.textContent = `${centerWorld[0].toFixed(1)}, ${centerWorld[1].toFixed(1)}`;
+function clearSelection() {
+  selectedWallId = null;
+  updateProperties();
+  render();
+}
 
-  if (building && building.getWalls()) {
-    wallCountBadge.textContent = `${building.getWalls().length} walls`;
+function updateProperties() {
+  propertyContent.innerHTML = "";
+
+  if (!selectedWallId) {
+    propertyContent.textContent = "Nothing selected.";
+    return;
+  }
+
+  const wall = building.getWall(selectedWallId);
+  if (!wall) {
+    propertyContent.textContent = "Wall not found.";
+    return;
+  }
+
+  const title = document.createElement("div");
+  title.innerHTML = `<strong style="font-size: 15px; color: var(--accent);">${wall.id}</strong>`;
+  title.style.marginBottom = "10px";
+  propertyContent.appendChild(title);
+
+  addNumberInput("Start X", wall.start[0], value => {
+    wall.start[0] = value;
+    afterModelChange();
+  });
+
+  addNumberInput("Start Y", wall.start[1], value => {
+    wall.start[1] = value;
+    afterModelChange();
+  });
+
+  addNumberInput("End X", wall.end[0], value => {
+    wall.end[0] = value;
+    afterModelChange();
+  });
+
+  addNumberInput("End Y", wall.end[1], value => {
+    wall.end[1] = value;
+    afterModelChange();
+  });
+
+  addNumberInput("Thickness (m)", wall.thickness, value => {
+    if (value <= 0) return;
+    wall.setThickness(value);
+    afterModelChange();
+  });
+
+  addNumberInput("Height (m)", wall.height, value => {
+    if (value <= 0) return;
+    wall.setHeight(value);
+    afterModelChange();
+  });
+
+  const lengthRow = document.createElement("div");
+  lengthRow.className = "property-row";
+  lengthRow.style.marginTop = "12px";
+  lengthRow.style.paddingTop = "8px";
+  lengthRow.style.borderTop = "1px solid var(--panel-border)";
+  lengthRow.innerHTML = `<strong>Length:</strong> ${wall.getLength().toFixed(3)} m`;
+  propertyContent.appendChild(lengthRow);
+}
+
+function addNumberInput(label, value, onChange) {
+  const row = document.createElement("div");
+  row.className = "property-row";
+
+  const labelElement = document.createElement("label");
+  labelElement.textContent = label;
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "0.1";
+  input.value = value;
+
+  input.addEventListener("change", () => {
+    const number = Number(input.value);
+    if (!Number.isFinite(number)) return;
+    onChange(number);
+  });
+
+  row.appendChild(labelElement);
+  row.appendChild(input);
+  propertyContent.appendChild(row);
+}
+
+// ============================================================
+// MODEL SYNC & EXPORT
+// ============================================================
+
+function afterModelChange() {
+  updateProperties();
+  updateJSON();
+  render();
+}
+
+function updateJSON() {
+  if (building) {
+    jsonOutput.textContent = building.toJSONString();
   }
 }
 
+function updateStatus(message) {
+  status.textContent = message;
+}
+
 // ============================================================
-// CAMERA INTERACTION (Zoom & Pan)
+// POINT-TO-SEGMENT WALL HIT TESTING
 // ============================================================
 
-canvas.addEventListener("wheel", (e) => {
-  e.preventDefault();
+function distancePointToSegment(point, start, end) {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
 
-  const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
-  const newScale = Math.max(10, Math.min(300, scale * zoomFactor));
+  if (dx === 0 && dy === 0) {
+    return Math.sqrt(Math.pow(point[0] - start[0], 2) + Math.pow(point[1] - start[1], 2));
+  }
 
-  const mouseScreen = [e.clientX, e.clientY];
-  const mouseWorld = screenToWorld(mouseScreen);
+  const t = Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / (dx * dx + dy * dy)));
+  const closest = [start[0] + t * dx, start[1] + t * dy];
 
-  scale = newScale;
+  return Math.sqrt(Math.pow(point[0] - closest[0], 2) + Math.pow(point[1] - closest[1], 2));
+}
 
-  offsetX = mouseScreen[0] - mouseWorld[0] * scale;
-  offsetY = mouseScreen[1] + mouseWorld[1] * scale;
+function findWallAtPoint(worldPoint) {
+  const tolerance = 14 / scale; // 14 pixels tolerance in world units
+  let closestWall = null;
+  let closestDistance = Infinity;
 
-  render();
-}, { passive: false });
+  for (const wall of building.getWalls()) {
+    const distance = distancePointToSegment(worldPoint, wall.start, wall.end);
+    if (distance < tolerance && distance < closestDistance) {
+      closestDistance = distance;
+      closestWall = wall;
+    }
+  }
 
-let dragging = false;
-let lastMouse = [0, 0];
+  return closestWall;
+}
 
-canvas.addEventListener("mousedown", (e) => {
-  dragging = true;
-  lastMouse = [e.clientX, e.clientY];
+// ============================================================
+// MOUSE EVENT HANDLERS
+// ============================================================
+
+function getMousePosition(event) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
+  };
+}
+
+canvas.addEventListener("mousedown", event => {
+  const mouse = getMousePosition(event);
+  const world = screenToWorld(mouse.x, mouse.y);
+
+  // PAN TOOL
+  if (tool === "pan") {
+    panning = true;
+    panStartX = event.clientX;
+    panStartY = event.clientY;
+    return;
+  }
+
+  // NEW WALL TOOL
+  if (tool === "new-wall") {
+    if (!newWallStart) {
+      newWallStart = world;
+      updateStatus("Click endpoint for new wall.");
+    } else {
+      const newWall = building.addWall(newWallStart, world);
+      newWallStart = null;
+      newWallPreview.innerHTML = "";
+      selectWall(newWall.id);
+      updateStatus(`Created ${newWall.id}`);
+      afterModelChange();
+    }
+    return;
+  }
+
+  // SELECT / MOVE TOOL
+  const wall = findWallAtPoint(world);
+
+  if (!wall) {
+    clearSelection();
+    return;
+  }
+
+  selectWall(wall.id);
+
+  if (tool === "move") {
+    draggingWall = true;
+    dragStartWorld = world;
+    dragOriginalStart = [...wall.start];
+    dragOriginalEnd = [...wall.end];
+  }
 });
 
-canvas.addEventListener("mousemove", (e) => {
-  if (!dragging) return;
-  const dx = e.clientX - lastMouse[0];
-  const dy = e.clientY - lastMouse[1];
+canvas.addEventListener("mousemove", event => {
+  const mouse = getMousePosition(event);
+  const world = screenToWorld(mouse.x, mouse.y);
 
-  offsetX += dx;
-  offsetY += dy;
-
-  lastMouse = [e.clientX, e.clientY];
-  render();
-});
-
-canvas.addEventListener("mouseup", () => { dragging = false; });
-canvas.addEventListener("mouseleave", () => { dragging = false; });
-
-function fitCamera() {
-  if (!building || !building.getWalls() || building.getWalls().length === 0) {
-    scale = 40;
-    offsetX = window.innerWidth / 2;
-    offsetY = window.innerHeight / 2;
+  // PANNING
+  if (panning) {
+    offsetX += event.clientX - panStartX;
+    offsetY += event.clientY - panStartY;
+    panStartX = event.clientX;
+    panStartY = event.clientY;
     render();
     return;
   }
 
-  let minX = Infinity, maxX = -Infinity;
-  let minY = Infinity, maxY = -Infinity;
-
-  for (const wall of building.getWalls()) {
-    minX = Math.min(minX, wall.start[0], wall.end[0]);
-    maxX = Math.max(maxX, wall.start[0], wall.end[0]);
-    minY = Math.min(minY, wall.start[1], wall.end[1]);
-    maxY = Math.max(maxY, wall.start[1], wall.end[1]);
+  // NEW WALL PREVIEW
+  if (tool === "new-wall" && newWallStart) {
+    newWallPreview.innerHTML = "";
+    const p1 = worldToScreen(newWallStart);
+    const p2 = worldToScreen(world);
+    createLine(p1, p2, "preview-line", newWallPreview);
+    createElement("circle", { cx: p1[0], cy: p1[1], r: 5, class: "preview-circle" }, newWallPreview);
+    createElement("circle", { cx: p2[0], cy: p2[1], r: 5, class: "preview-circle" }, newWallPreview);
+    return;
   }
 
-  const padding = 2;
-  const widthM = (maxX - minX) + padding * 2;
-  const heightM = (maxY - minY) + padding * 2;
+  // DRAGGING WALL
+  if (draggingWall && selectedWallId) {
+    const wall = building.getWall(selectedWallId);
+    if (!wall) return;
 
-  const canvasW = canvas.clientWidth || window.innerWidth;
-  const canvasH = canvas.clientHeight || window.innerHeight;
+    const dx = world[0] - dragStartWorld[0];
+    const dy = world[1] - dragStartWorld[1];
 
-  const scaleX = canvasW / widthM;
-  const scaleY = canvasH / heightM;
+    wall.start = [dragOriginalStart[0] + dx, dragOriginalStart[1] + dy];
+    wall.end = [dragOriginalEnd[0] + dx, dragOriginalEnd[1] + dy];
 
-  scale = Math.max(15, Math.min(100, Math.min(scaleX, scaleY)));
+    afterModelChange();
+  }
+});
 
-  const centerM = [(minX + maxX) / 2, (minY + maxY) / 2];
-  offsetX = canvasW / 2 - centerM[0] * scale;
-  offsetY = canvasH / 2 + centerM[1] * scale;
+canvas.addEventListener("mouseup", () => {
+  draggingWall = false;
+  panning = false;
+});
 
+canvas.addEventListener("mouseleave", () => {
+  draggingWall = false;
+  panning = false;
+});
+
+// WHEEL ZOOM
+canvas.addEventListener("wheel", event => {
+  event.preventDefault();
+  const mouse = getMousePosition(event);
+  const worldBefore = screenToWorld(mouse.x, mouse.y);
+
+  const factor = event.deltaY < 0 ? 1.15 : 0.85;
+  scale = Math.max(10, Math.min(300, scale * factor));
+
+  offsetX = mouse.x - worldBefore[0] * scale;
+  offsetY = mouse.y + worldBefore[1] * scale;
+
+  render();
+}, { passive: false });
+
+// ============================================================
+// TOOLBAR & VIEW MODE SWITCHER
+// ============================================================
+
+function setTool(nextTool) {
+  tool = nextTool;
+  newWallStart = null;
+  newWallPreview.innerHTML = "";
+  draggingWall = false;
+
+  document.querySelectorAll("#toolbar button").forEach(b => {
+    if (b.id.endsWith("-tool")) b.classList.remove("active");
+  });
+
+  const button = document.getElementById(`${nextTool}-tool`);
+  if (button) button.classList.add("active");
+
+  canvas.className = "";
+  if (nextTool === "pan") canvas.classList.add("pan-mode");
+  if (nextTool === "move") canvas.classList.add("move-mode");
+  if (nextTool === "new-wall") canvas.classList.add("crosshair-mode");
+
+  updateStatus(`Tool: ${nextTool.toUpperCase()}`);
   render();
 }
 
-document.getElementById("zoom-in-btn").addEventListener("click", () => {
-  scale = Math.min(300, scale * 1.25);
-  render();
+document.getElementById("select-tool").addEventListener("click", () => setTool("select"));
+document.getElementById("pan-tool").addEventListener("click", () => setTool("pan"));
+document.getElementById("move-tool").addEventListener("click", () => setTool("move"));
+document.getElementById("new-wall-tool").addEventListener("click", () => setTool("new-wall"));
+
+document.getElementById("delete-tool").addEventListener("click", () => {
+  if (!selectedWallId) {
+    updateStatus("Select a wall first to delete.");
+    return;
+  }
+  const id = selectedWallId;
+  building.deleteWall(id);
+  selectedWallId = null;
+  updateStatus(`Deleted ${id}`);
+  afterModelChange();
 });
 
-document.getElementById("zoom-out-btn").addEventListener("click", () => {
-  scale = Math.max(10, scale / 1.25);
-  render();
-});
-
-document.getElementById("reset-cam-btn").addEventListener("click", fitCamera);
-
-// Mode Toggle Buttons
+// Mode switchers
 const modeSimpleBtn = document.getElementById("mode-simple-btn");
 const modePlanBtn = document.getElementById("mode-plan-btn");
 const modeIsometricBtn = document.getElementById("mode-isometric-btn");
@@ -539,103 +701,44 @@ modeSimpleBtn.addEventListener("click", () => setViewMode("simple"));
 modePlanBtn.addEventListener("click", () => setViewMode("plan"));
 modeIsometricBtn.addEventListener("click", () => setViewMode("isometric"));
 
-// Editor Toggle
-const toggleEditorBtn = document.getElementById("toggle-editor-btn");
-const editorPanel = document.getElementById("editor-panel");
-
-toggleEditorBtn.addEventListener("click", () => {
-  editorPanel.classList.toggle("collapsed");
-  toggleEditorBtn.classList.toggle("active", !editorPanel.classList.contains("collapsed"));
-});
-
 // ============================================================
-// LIVE JSON EDITING & VALIDATION PIPELINE
+// RENDER & INITIALIZATION
 // ============================================================
 
-function handleJsonInput() {
-  const text = jsonInput.value;
+function render() {
+  if (!building) return;
 
-  // 1. Validate raw text before constructing Building model
-  let errors = [];
-  if (typeof window.validateBuildingJSON === "function") {
-    errors = window.validateBuildingJSON(text);
-  } else {
-    try { JSON.parse(text); } catch (e) { errors.push(e.message); }
-  }
-
-  if (errors.length > 0) {
-    statusDot.classList.add("error");
-    statusText.textContent = "Invalid JSON";
-    errorBanner.style.display = "block";
-    errorBanner.innerHTML = `<strong>Validation Error:</strong> ${errors[0]}`;
-    return;
-  }
-
-  // 2. Valid JSON -> Parse & Instantiate Building Model
-  statusDot.classList.remove("error");
-  statusText.textContent = "Valid JSON";
-  errorBanner.style.display = "none";
-
-  try {
-    const data = JSON.parse(text);
-    building = new Building(data);
-    render();
-  } catch (err) {
-    console.error("Failed to construct Building model:", err);
-  }
+  drawGrid();
+  drawRooms();
+  drawWalls();
+  drawDoors();
+  drawWindows();
+  updateJSON();
 }
-
-jsonInput.addEventListener("input", handleJsonInput);
-
-document.getElementById("reset-json-btn").addEventListener("click", () => {
-  jsonInput.value = rawJsonText;
-  handleJsonInput();
-});
-
-// ============================================================
-// INITIALIZATION PIPELINE
-// ============================================================
 
 async function loadBuilding() {
   try {
-    const response = await fetch("building.json");
+    const response = await fetch("./building.json");
     if (!response.ok) throw new Error("Could not load building.json");
 
-    rawJsonText = await response.text();
-    jsonInput.value = rawJsonText;
-
-    // Validate raw text
-    let errors = [];
-    if (typeof window.validateBuildingJSON === "function") {
-      errors = window.validateBuildingJSON(rawJsonText);
-    }
+    const jsonText = await response.text();
+    const errors = validateBuildingJSON(jsonText);
 
     if (errors.length > 0) {
-      statusDot.classList.add("error");
-      statusText.textContent = "Invalid JSON";
-      errorBanner.style.display = "block";
-      errorBanner.innerHTML = `<strong>Validation Error:</strong> ${errors[0]}`;
+      updateStatus(`Validation error in building.json`);
       return;
     }
 
-    const data = JSON.parse(rawJsonText);
-
-    // Architectural boundary: JSON -> Building Model instance
+    const data = JSON.parse(jsonText);
     building = new Building(data);
 
-    console.log("Building model instantiated:", building);
-    console.log("Wall-1 model query:", building.getWall("wall-1"));
-    console.log("Doors on wall-1:", building.getDoorsForWall("wall-1"));
-    console.log("Living Room area calculation:", building.calculateRoomArea("room-1"));
-
-    fitCamera();
+    updateStatus("Building model loaded. Click a wall to select.");
+    render();
   } catch (err) {
     console.error(err);
-    errorBanner.style.display = "block";
-    errorBanner.textContent = err.message;
+    updateStatus(`Error: ${err.message}`);
   }
 }
 
 window.addEventListener("resize", render);
-
 loadBuilding();

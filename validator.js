@@ -1281,3 +1281,5 @@ function distance(
     dy * dy
   );
 }
+
+export { validateBuildingJSON };
