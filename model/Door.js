@@ -2,9 +2,9 @@ export class Door {
   constructor(data, building) {
     this.id = data.id;
     this.wallId = data.wallId;
-    this.offset = data.offset;
-    this.width = data.width;
-    this.height = data.height;
+    this.offset = data.offset ?? data.position ?? 0;
+    this.width = data.width ?? 0.9;
+    this.height = data.height ?? 2.1;
     this.levelId = data.levelId ?? null;
     this.building = building;
   }

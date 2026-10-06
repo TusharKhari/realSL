@@ -1,157 +1,298 @@
 {
-  "id": "building-1",
-  "levels": [
-    {
-      "id": "ground-floor",
-      "elevation": 0,
-      "height": 2.8
-    },
-    {
-      "id": "first-floor",
-      "elevation": 3.0,
-      "height": 2.8
-    }
-  ],
-  "walls": [
-    {
-      "id": "wall-ground-1",
-      "levelId": "ground-floor",
-      "start": [0, 0],
-      "end": [10, 0],
-      "thickness": 0.2,
-      "height": 2.8
-    },
-    {
-      "id": "wall-ground-2",
-      "levelId": "ground-floor",
-      "start": [10, 0],
-      "end": [10, 6],
-      "thickness": 0.2,
-      "height": 2.8
-    },
-    {
-      "id": "wall-ground-3",
-      "levelId": "ground-floor",
-      "start": [10, 6],
-      "end": [0, 6],
-      "thickness": 0.2,
-      "height": 2.8
-    },
-    {
-      "id": "wall-ground-4",
-      "levelId": "ground-floor",
-      "start": [0, 6],
-      "end": [0, 0],
-      "thickness": 0.2,
-      "height": 2.8
-    },
-    {
-      "id": "wall-first-1",
-      "levelId": "first-floor",
-      "start": [0, 0],
-      "end": [10, 0],
-      "thickness": 0.2,
-      "height": 2.8
-    },
-    {
-      "id": "wall-first-2",
-      "levelId": "first-floor",
-      "start": [10, 0],
-      "end": [10, 6],
-      "thickness": 0.2,
-      "height": 2.8
-    },
-    {
-      "id": "wall-first-3",
-      "levelId": "first-floor",
-      "start": [10, 6],
-      "end": [0, 6],
-      "thickness": 0.2,
-      "height": 2.8
-    },
-    {
-      "id": "wall-first-4",
-      "levelId": "first-floor",
-      "start": [0, 6],
-      "end": [0, 0],
-      "thickness": 0.2,
-      "height": 2.8
-    }
-  ],
-  "rooms": [
-    {
-      "id": "room-ground",
-      "name": "Living Room",
-      "type": "living_room",
-      "levelId": "ground-floor",
-      "boundary": [
-        [0, 0],
-        [10, 0],
-        [10, 6],
-        [0, 6]
-      ]
-    },
-    {
-      "id": "room-first",
-      "name": "Master Bedroom",
-      "type": "bedroom",
-      "levelId": "first-floor",
-      "boundary": [
-        [0, 0],
-        [10, 0],
-        [10, 6],
-        [0, 6]
-      ]
-    }
-  ],
-  "doors": [
-    {
-      "id": "door-ground-1",
-      "wallId": "wall-ground-1",
-      "levelId": "ground-floor",
-      "offset": 3,
-      "width": 0.9,
-      "height": 2.1
-    }
-  ],
-  "windows": [
-    {
-      "id": "window-first-1",
-      "wallId": "wall-first-1",
-      "levelId": "first-floor",
-      "offset": 7,
-      "width": 1.8,
-      "height": 1.2,
-      "sillHeight": 0.9
-    }
-  ],
-  "stairs": [
-    {
-      "id": "stairs-1",
-      "levelFrom": "ground-floor",
-      "levelTo": "first-floor",
-      "position": [4, 3],
-      "width": 1.0,
-      "steps": 16
-    }
-  ],
-  "furniture": [
-    {
-      "id": "sofa-1",
-      "type": "sofa",
-      "levelId": "ground-floor",
-      "position": [3, 2],
-      "rotation": 90,
-      "scale": [2, 1, 1]
-    },
-    {
-      "id": "table-1",
-      "type": "table",
-      "levelId": "ground-floor",
-      "position": [6, 3],
-      "rotation": 0,
-      "scale": [1, 1, 1]
-    }
-  ]
+"id": "building-1",
+"walls": [
+{
+"id": "wall-ext-north-1",
+"start": { "x": 0.0, "y": 0.0 },
+"end": { "x": 4.1, "y": 0.0 }
+},
+{
+"id": "wall-ext-north-2",
+"start": { "x": 4.1, "y": 0.0 },
+"end": { "x": 10.21, "y": 0.0 }
+},
+{
+"id": "wall-ext-east-1",
+"start": { "x": 10.21, "y": 0.0 },
+"end": { "x": 10.21, "y": 4.06 }
+},
+{
+"id": "wall-ext-east-2",
+"start": { "x": 10.21, "y": 4.06 },
+"end": { "x": 10.21, "y": 10.56 }
+},
+{
+"id": "wall-ext-south-garage",
+"start": { "x": 6.68, "y": 10.56 },
+"end": { "x": 10.21, "y": 10.56 }
+},
+{
+"id": "wall-ext-east-living",
+"start": { "x": 6.68, "y": 8.73 },
+"end": { "x": 6.68, "y": 10.56 }
+},
+{
+"id": "wall-ext-south-living",
+"start": { "x": 0.0, "y": 8.73 },
+"end": { "x": 6.68, "y": 8.73 }
+},
+{
+"id": "wall-ext-west-living",
+"start": { "x": 0.0, "y": 4.06 },
+"end": { "x": 0.0, "y": 8.73 }
+},
+{
+"id": "wall-ext-west-master",
+"start": { "x": 0.0, "y": 0.0 },
+"end": { "x": 0.0, "y": 4.06 }
+},
+{
+"id": "wall-wic-east",
+"start": { "x": 1.7, "y": 0.0 },
+"end": { "x": 1.7, "y": 2.0 }
+},
+{
+"id": "wall-bath-south",
+"start": { "x": 1.7, "y": 2.0 },
+"end": { "x": 3.76, "y": 2.0 }
+},
+{
+"id": "wall-bath-wic-south",
+"start": { "x": 0.0, "y": 2.0 },
+"end": { "x": 1.7, "y": 2.0 }
+},
+{
+"id": "wall-master-south-1",
+"start": { "x": 0.0, "y": 4.06 },
+"end": { "x": 2.8, "y": 4.06 }
+},
+{
+"id": "wall-master-south-2",
+"start": { "x": 2.8, "y": 4.06 },
+"end": { "x": 3.76, "y": 3.1 }
+},
+{
+"id": "wall-master-kitchen-sep",
+"start": { "x": 3.76, "y": 2.0 },
+"end": { "x": 3.76, "y": 3.1 }
+},
+{
+"id": "wall-kitchen-bed-sep",
+"start": { "x": 6.96, "y": 0.0 },
+"end": { "x": 6.96, "y": 4.06 }
+},
+{
+"id": "wall-bed-south",
+"start": { "x": 6.96, "y": 4.06 },
+"end": { "x": 10.21, "y": 4.06 }
+},
+{
+"id": "wall-garage-west",
+"start": { "x": 6.68, "y": 4.06 },
+"end": { "x": 6.68, "y": 8.73 }
+},
+{
+"id": "wall-dining-porch-west",
+"start": { "x": 1.83, "y": 4.06 },
+"end": { "x": 1.83, "y": 6.5 }
+},
+{
+"id": "wall-dining-living-sep",
+"start": { "x": 1.83, "y": 6.5 },
+"end": { "x": 6.68, "y": 6.5 }
+},
+{
+"id": "wall-porch-front-south",
+"start": { "x": 0.0, "y": 11.17 },
+"end": { "x": 5.79, "y": 11.17 }
+},
+{
+"id": "wall-porch-front-west",
+"start": { "x": 0.0, "y": 8.73 },
+"end": { "x": 0.0, "y": 11.17 }
+},
+{
+"id": "wall-porch-front-east",
+"start": { "x": 5.79, "y": 8.73 },
+"end": { "x": 5.79, "y": 11.17 }
 }
-
+],
+"rooms": [
+{
+"id": "room-master-bedroom",
+"name": "Master Bedroom",
+"wallIds": [
+"wall-ext-west-master",
+"wall-bath-wic-south",
+"wall-bath-south",
+"wall-master-kitchen-sep",
+"wall-master-south-2",
+"wall-master-south-1"
+]
+},
+{
+"id": "room-wic",
+"name": "WIC",
+"wallIds": [
+"wall-ext-north-1",
+"wall-wic-east",
+"wall-bath-wic-south",
+"wall-ext-west-master"
+]
+},
+{
+"id": "room-bath-master",
+"name": "Master Bath",
+"wallIds": [
+"wall-ext-north-1",
+"wall-master-kitchen-sep",
+"wall-bath-south",
+"wall-wic-east"
+]
+},
+{
+"id": "room-bedroom",
+"name": "Bedroom",
+"wallIds": [
+"wall-ext-north-2",
+"wall-ext-east-1",
+"wall-bed-south",
+"wall-kitchen-bed-sep"
+]
+},
+{
+"id": "room-kitchen",
+"name": "Kitchen",
+"wallIds": [
+"wall-kitchen-bed-sep",
+"wall-bed-south",
+"wall-garage-west",
+"wall-master-south-2",
+"wall-master-kitchen-sep"
+]
+},
+{
+"id": "room-dining",
+"name": "Dining",
+"wallIds": [
+"wall-dining-porch-west",
+"wall-master-south-1",
+"wall-master-south-2",
+"wall-garage-west",
+"wall-dining-living-sep"
+]
+},
+{
+"id": "room-living",
+"name": "Living Room",
+"wallIds": [
+"wall-ext-west-living",
+"wall-dining-living-sep",
+"wall-garage-west",
+"wall-ext-east-living",
+"wall-ext-south-living"
+]
+},
+{
+"id": "room-garage",
+"name": "Garage",
+"wallIds": [
+"wall-garage-west",
+"wall-ext-east-2",
+"wall-ext-south-garage"
+]
+},
+{
+"id": "room-porch-front",
+"name": "Front Porch",
+"wallIds": [
+"wall-ext-south-living",
+"wall-porch-front-east",
+"wall-porch-front-south",
+"wall-porch-front-west"
+]
+},
+{
+"id": "room-porch-side",
+"name": "Side Porch",
+"wallIds": [
+"wall-ext-west-living",
+"wall-dining-porch-west"
+]
+}
+],
+"doors": [
+{
+"id": "door-entry-front",
+"wallId": "wall-ext-south-living",
+"position": 2.8,
+"width": 0.91
+},
+{
+"id": "door-master",
+"wallId": "wall-master-south-2",
+"position": 0.5,
+"width": 0.81
+},
+{
+"id": "door-wic",
+"wallId": "wall-bath-wic-south",
+"position": 0.85,
+"width": 0.76
+},
+{
+"id": "door-bath-master",
+"wallId": "wall-bath-south",
+"position": 1.0,
+"width": 0.76
+},
+{
+"id": "door-bedroom",
+"wallId": "wall-bed-south",
+"position": 0.6,
+"width": 0.81
+},
+{
+"id": "door-porch-side",
+"wallId": "wall-dining-porch-west",
+"position": 1.5,
+"width": 0.81
+},
+{
+"id": "door-garage-ext",
+"wallId": "wall-ext-south-garage",
+"position": 1.76,
+"width": 2.44
+}
+],
+"windows": [
+{
+"id": "window-north-bath",
+"wallId": "wall-ext-north-1",
+"position": 3.0,
+"width": 0.9,
+"height": 1.2
+},
+{
+"id": "window-north-bed",
+"wallId": "wall-ext-north-2",
+"position": 2.0,
+"width": 1.2,
+"height": 1.2
+},
+{
+"id": "window-living-front-1",
+"wallId": "wall-ext-south-living",
+"position": 1.0,
+"width": 0.9,
+"height": 1.5
+},
+{
+"id": "window-living-front-2",
+"wallId": "wall-ext-south-living",
+"position": 4.8,
+"width": 0.9,
+"height": 1.5
+}
+]
+}

@@ -1,8 +1,14 @@
+function normalizePoint(pt) {
+  if (Array.isArray(pt)) return [Number(pt[0]), Number(pt[1])];
+  if (pt && typeof pt === "object") return [Number(pt.x ?? 0), Number(pt.y ?? 0)];
+  return [0, 0];
+}
+
 export class Wall {
   constructor(data) {
     this.id = data.id;
-    this.start = [...data.start];
-    this.end = [...data.end];
+    this.start = normalizePoint(data.start);
+    this.end = normalizePoint(data.end);
     this.thickness = data.thickness ?? 0.2;
     this.height = data.height ?? 2.8;
     this.levelId = data.levelId ?? null;

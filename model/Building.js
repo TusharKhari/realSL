@@ -11,7 +11,11 @@ export class Building {
     this.id = data.id ?? "building-1";
     this.data = data;
 
-    this.levels = (data.levels ?? []).map(level => new Level(level));
+    const levelsData = (data.levels && data.levels.length > 0)
+      ? data.levels
+      : [{ id: "ground-floor", elevation: 0, height: 2.8 }];
+
+    this.levels = levelsData.map(level => new Level(level));
     this.walls = (data.walls ?? []).map(wall => new Wall(wall));
     this.rooms = (data.rooms ?? []).map(room => new Room(room, this));
     this.doors = (data.doors ?? []).map(door => new Door(door, this));

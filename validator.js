@@ -1,4 +1,4 @@
- function validateBuildingJSON(jsonText) {
+export function validateBuildingJSON(jsonText) {
 
   const errors = [];
 
@@ -418,41 +418,19 @@
     point,
     path
   ) {
-
-    if (
-      !Array.isArray(point)
-    ) {
-
-      errors.push(
-        `${path} must be an array [x, y].`
-      );
-
-      return;
+    if (Array.isArray(point)) {
+      if (point.length !== 2) {
+        errors.push(`${path} must contain exactly 2 coordinates.`);
+        return;
+      }
+      requireNumber(point[0], `${path}[0]`);
+      requireNumber(point[1], `${path}[1]`);
+    } else if (point && typeof point === "object") {
+      requireNumber(point.x, `${path}.x`);
+      requireNumber(point.y, `${path}.y`);
+    } else {
+      errors.push(`${path} must be an array [x, y] or object {x, y}.`);
     }
-
-
-    if (
-      point.length !== 2
-    ) {
-
-      errors.push(
-        `${path} must contain exactly 2 coordinates.`
-      );
-
-      return;
-    }
-
-
-    requireNumber(
-      point[0],
-      `${path}[0]`
-    );
-
-
-    requireNumber(
-      point[1],
-      `${path}[1]`
-    );
   }
 
 
@@ -550,18 +528,6 @@
         path
       );
 
-      requireField(
-        wall,
-        "thickness",
-        path
-      );
-
-      requireField(
-        wall,
-        "height",
-        path
-      );
-
 
       if (
         wall.start !== undefined
@@ -652,24 +618,6 @@
         path
       );
 
-      requireField(
-        door,
-        "offset",
-        path
-      );
-
-      requireField(
-        door,
-        "width",
-        path
-      );
-
-      requireField(
-        door,
-        "height",
-        path
-      );
-
 
       // ------------------------------------------
       // wallId
@@ -705,19 +653,21 @@
       // dimensions
       // ------------------------------------------
 
+      const offsetVal = door.offset ?? door.position;
+
       if (
-        door.offset !== undefined
+        offsetVal !== undefined
       ) {
 
         requireNumber(
-          door.offset,
+          offsetVal,
           `${path}.offset`
         );
 
 
         if (
-          typeof door.offset === "number" &&
-          door.offset < 0
+          typeof offsetVal === "number" &&
+          offsetVal < 0
         ) {
 
           errors.push(
@@ -794,30 +744,6 @@
         path
       );
 
-      requireField(
-        window,
-        "offset",
-        path
-      );
-
-      requireField(
-        window,
-        "width",
-        path
-      );
-
-      requireField(
-        window,
-        "height",
-        path
-      );
-
-      requireField(
-        window,
-        "sillHeight",
-        path
-      );
-
 
       // ------------------------------------------
       // wallId
@@ -853,19 +779,21 @@
       // offset
       // ------------------------------------------
 
+      const winOffsetVal = window.offset ?? window.position;
+
       if (
-        window.offset !== undefined
+        winOffsetVal !== undefined
       ) {
 
         requireNumber(
-          window.offset,
+          winOffsetVal,
           `${path}.offset`
         );
 
 
         if (
-          typeof window.offset === "number" &&
-          window.offset < 0
+          typeof winOffsetVal === "number" &&
+          winOffsetVal < 0
         ) {
 
           errors.push(
@@ -968,24 +896,6 @@
       requireField(
         room,
         "id",
-        path
-      );
-
-      requireField(
-        room,
-        "name",
-        path
-      );
-
-      requireField(
-        room,
-        "type",
-        path
-      );
-
-      requireField(
-        room,
-        "boundary",
         path
       );
 
@@ -1617,5 +1527,3 @@ function distance(
     dy * dy
   );
 }
-
-export { validateBuildingJSON };
