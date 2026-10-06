@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON → 2D Building Renderer</title>
+
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --panel-bg: rgba(30, 41, 59, 0.85);
+      --panel-border: rgba(255, 255, 255, 0.1);
+      --text-color: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --danger: #f43f5e;
+      --success: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header Navbar */
+    .header {
+      height: 52px;
+      background: #1e293b;
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 20;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      color: #f8fafc;
+    }
+
+    .brand .badge {
+      background: #0284c7;
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    .controls-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      background: #334155;
+      color: #f8fafc;
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: #475569;
+      border-color: rgba(255,255,255,0.2);
+    }
+
+    .btn.active {
+      background: var(--accent);
+      color: #0f172a;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .btn-icon {
+      padding: 6px 10px;
+    }
+
+    /* App Workspace Layout */
+    .workspace {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* JSON Editor Sidebar */
+    .editor-panel {
+      width: 380px;
+      background: #0f172a;
+      border-right: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+      transition: margin-left 0.3s ease;
+      z-index: 15;
+    }
+
+    .editor-panel.collapsed {
+      margin-left: -380px;
+    }
+
+    .editor-header {
+      padding: 10px 16px;
+      background: #1e293b;
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .editor-textarea {
+      flex: 1;
+      width: 100%;
+      background: #090d16;
+      color: #38bdf8;
+      font-family: "Fira Code", "Courier New", Courier, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 16px;
+      border: none;
+      resize: none;
+      outline: none;
+    }
+
+    .editor-status {
+      padding: 8px 16px;
+      background: #1e293b;
+      border-top: 1px solid var(--panel-border);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+
+    .status-dot.error {
+      background: var(--danger);
+    }
+
+    /* Viewport Area */
+    .viewport {
+      flex: 1;
+      position: relative;
+      background: #090d16;
+    }
+
+    svg#canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+      user-select: none;
+    }
+
+    svg#canvas:active {
+      cursor: grabbing;
+    }
+
+    /* Floating Overlay Controls */
+    .hud {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .hud-card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    .hud-card strong {
+      color: var(--text-color);
+    }
+
+    /* SVG Canvas Element Styling */
+    .grid-line {
+      stroke: #1e293b;
+      stroke-width: 1;
+    }
+
+    .grid-line-major {
+      stroke: #334155;
+      stroke-width: 1.5;
+    }
+
+    .axis-x {
+      stroke: #0284c7;
+      stroke-width: 2;
+    }
+
+    .axis-y {
+      stroke: #10b981;
+      stroke-width: 2;
+    }
+
+    .axis-label {
+      font-family: monospace;
+      font-size: 10px;
+      fill: #64748b;
+      user-select: none;
+    }
+
+    .origin-label {
+      font-family: monospace;
+      font-size: 11px;
+      fill: #38bdf8;
+      font-weight: bold;
+    }
+
+    /* Simple 2D Wall Lines */
+    .wall-line-simple {
+      stroke: #38bdf8;
+      stroke-width: 4;
+      stroke-linecap: round;
+    }
+
+    .wall-line-simple-label {
+      font-size: 11px;
+      fill: #f8fafc;
+      font-weight: 600;
+      text-anchor: middle;
+    }
+
+    /* 2D Plan Styling */
+    .room-plan {
+      fill: rgba(56, 189, 248, 0.12);
+      stroke: rgba(56, 189, 248, 0.4);
+      stroke-width: 1.5;
+      stroke-dasharray: 4;
+    }
+
+    .room-label {
+      font-size: 13px;
+      fill: #38bdf8;
+      font-weight: 700;
+      text-anchor: middle;
+    }
+
+    .room-info {
+      font-size: 11px;
+      fill: #94a3b8;
+      text-anchor: middle;
+    }
+
+    .wall-plan {
+      fill: #334155;
+      stroke: #94a3b8;
+      stroke-width: 1.5;
+    }
+
+    .wall-centerline {
+      stroke: #38bdf8;
+      stroke-width: 1;
+      stroke-dasharray: 2 2;
+    }
+
+    .door-plan {
+      fill: none;
+      stroke: #f59e0b;
+      stroke-width: 2;
+    }
+
+    .door-arc {
+      fill: none;
+      stroke: #f59e0b;
+      stroke-width: 1.5;
+      stroke-dasharray: 3 3;
+    }
+
+    .door-label {
+      font-size: 10px;
+      fill: #f59e0b;
+      font-weight: 600;
+      text-anchor: middle;
+    }
+
+    .window-plan {
+      fill: rgba(16, 185, 129, 0.2);
+      stroke: #10b981;
+      stroke-width: 2;
+    }
+
+    .window-label {
+      font-size: 10px;
+      fill: #10b981;
+      font-weight: 600;
+      text-anchor: middle;
+    }
+
+    /* 2.5D Isometric View Styles */
+    .wall-front {
+      fill: #475569;
+      stroke: #0f172a;
+      stroke-width: 1;
+    }
+
+    .wall-side {
+      fill: #334155;
+      stroke: #0f172a;
+      stroke-width: 1;
+    }
+
+    .wall-top {
+      fill: #64748b;
+      stroke: #0f172a;
+      stroke-width: 1;
+    }
+
+    .wall-label {
+      font-size: 11px;
+      fill: #f8fafc;
+      font-weight: bold;
+      text-anchor: middle;
+    }
+
+    .door-panel {
+      fill: rgba(245, 158, 11, 0.4);
+      stroke: #f59e0b;
+      stroke-width: 1.5;
+    }
+
+    .window-glass {
+      fill: rgba(16, 185, 129, 0.4);
+      stroke: #10b981;
+      stroke-width: 1.5;
+    }
+
+    /* Error Toast */
+    .error-banner {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #450a0a;
+      border: 1px solid #f43f5e;
+      color: #fecdd3;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 30;
+      display: none;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Top Navbar -->
+  <header class="header">
+    <div class="brand">
+      <span>JSON → 2D Renderer</span>
+      <span class="badge">SVG engine</span>
+    </div>
+
+    <div class="controls-group">
+      <button id="toggle-editor-btn" class="btn active">
+        <span>📝</span> JSON Source
+      </button>
+
+      <div style="width: 1px; height: 20px; background: var(--panel-border);"></div>
+
+      <span style="font-size: 12px; color: var(--text-muted);">View:</span>
+      <button id="mode-simple-btn" class="btn active" title="Pure 2D SVG Line renderer">2D Lines</button>
+      <button id="mode-plan-btn" class="btn" title="2D Floorplan with wall thickness & openings">2D Plan</button>
+      <button id="mode-isometric-btn" class="btn" title="2.5D Extruded view">2.5D Isometric</button>
+
+      <div style="width: 1px; height: 20px; background: var(--panel-border);"></div>
+
+      <button id="zoom-in-btn" class="btn btn-icon" title="Zoom In">+</button>
+      <button id="zoom-out-btn" class="btn btn-icon" title="Zoom Out">−</button>
+      <button id="reset-cam-btn" class="btn" title="Reset Viewport">⌖ Fit</button>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="workspace">
+    <!-- Live JSON Editor Sidebar -->
+    <aside id="editor-panel" class="editor-panel">
+      <div class="editor-header">
+        <span>SOURCE: building.json</span>
+        <button id="reset-json-btn" class="btn" style="padding: 2px 8px; font-size: 11px;">Reset JSON</button>
+      </div>
+
+      <textarea id="json-input" class="editor-textarea" spellcheck="false"></textarea>
+
+      <div class="editor-status">
+        <div class="status-indicator">
+          <div id="status-dot" class="status-dot"></div>
+          <span id="status-text">Valid JSON</span>
+        </div>
+        <span id="wall-count-badge" style="color: var(--text-muted);">4 walls</span>
+      </div>
+    </aside>
+
+    <!-- Interactive SVG Canvas Viewport -->
+    <section class="viewport">
+      <div class="hud">
+        <div class="hud-card">
+          <strong>Instructions:</strong><br>
+          • Edit <code>"end": [10, 0]</code> to <code>[15, 0]</code> in editor<br>
+          • Drag canvas = Pan<br>
+          • Scroll wheel = Zoom<br>
+          • Renderer directly interprets JSON!
+        </div>
+        <div class="hud-card" id="camera-info">
+          Scale: <span id="scale-val">50px/m</span> | Center: (<span id="center-val">0, 0</span>)
+        </div>
+      </div>
+
+      <div id="error-banner" class="error-banner"></div>
+
+      <svg id="canvas">
+        <g id="camera">
+          <g id="grid"></g>
+          <g id="rooms"></g>
+          <g id="building"></g>
+          <g id="doors"></g>
+          <g id="windows"></g>
+          <g id="labels"></g>
+        </g>
+      </svg>
+    </section>
+  </main>
+
+  <script src="./validator.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>
