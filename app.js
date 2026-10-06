@@ -157,42 +157,61 @@ function createPath(d, className, parent) {
 function drawGrid() {
   grid.innerHTML = "";
 
-  const range = 50; // Render grid from -50m to +50m
-  const step = 1;
+  const width = window.innerWidth;
+  const height = window.innerHeight;
 
-  // Render grid lines
-  for (let x = -range; x <= range; x += step) {
+  // Compute dynamic visible WORLD viewport bounds
+  const topLeft = screenToWorld([0, 0]);
+  const bottomRight = screenToWorld([width, height]);
+
+  const minX = Math.floor(Math.min(topLeft[0], bottomRight[0])) - 1;
+  const maxX = Math.ceil(Math.max(topLeft[0], bottomRight[0])) + 1;
+
+  const minY = Math.floor(Math.min(topLeft[1], bottomRight[1])) - 1;
+  const maxY = Math.ceil(Math.max(topLeft[1], bottomRight[1])) + 1;
+
+  // Vertical grid lines
+  for (let x = minX; x <= maxX; x++) {
     const isMajor = x % 5 === 0;
     const isAxis = x === 0;
 
-    const p1 = worldToScreen([x, -range]);
-    const p2 = worldToScreen([x, range]);
+    const p1 = worldToScreen([x, minY]);
+    const p2 = worldToScreen([x, maxY]);
 
     const line = createLine(p1, p2, null, grid);
     line.setAttribute("class", isAxis ? "axis-y" : isMajor ? "grid-line-major" : "grid-line");
 
-    // X-axis coordinate numbers/labels
+    // X-axis coordinate labels
     if (x % 5 === 0 && !isAxis) {
       const originY = worldToScreen([x, 0])[1];
       const labelText = createText(p1[0], originY + 14, `${x}m`, "axis-label", grid);
       labelText.setAttribute("text-anchor", "middle");
+    } else if (!isAxis && scale >= 30) {
+      const originY = worldToScreen([x, 0])[1];
+      const labelText = createText(p1[0], originY + 14, `${x}`, "axis-label", grid);
+      labelText.setAttribute("text-anchor", "middle");
     }
   }
 
-  for (let y = -range; y <= range; y += step) {
+  // Horizontal grid lines
+  for (let y = minY; y <= maxY; y++) {
     const isMajor = y % 5 === 0;
     const isAxis = y === 0;
 
-    const p1 = worldToScreen([-range, y]);
-    const p2 = worldToScreen([range, y]);
+    const p1 = worldToScreen([minX, y]);
+    const p2 = worldToScreen([maxX, y]);
 
     const line = createLine(p1, p2, null, grid);
     line.setAttribute("class", isAxis ? "axis-x" : isMajor ? "grid-line-major" : "grid-line");
 
-    // Y-axis coordinate numbers/labels
+    // Y-axis coordinate labels
     if (y % 5 === 0 && !isAxis) {
       const originX = worldToScreen([0, y])[0];
       const labelText = createText(originX - 8, p1[1] + 4, `${y}m`, "axis-label", grid);
+      labelText.setAttribute("text-anchor", "end");
+    } else if (!isAxis && scale >= 30) {
+      const originX = worldToScreen([0, y])[0];
+      const labelText = createText(originX - 8, p1[1] + 4, `${y}`, "axis-label", grid);
       labelText.setAttribute("text-anchor", "end");
     }
   }
@@ -202,7 +221,7 @@ function drawGrid() {
   const originText = createText(originScreen[0] - 8, originScreen[1] + 16, "(0,0)", "origin-label", grid);
   originText.setAttribute("text-anchor", "end");
 
-  // Axis arrows / indicators
+  // Axis direction indicators
   const arrowX = worldToScreen([3, 0]);
   createText(arrowX[0] + 10, arrowX[1] + 4, "+X", "origin-label", grid);
 
