@@ -399,8 +399,15 @@ function drawWalls(data) {
 }
 
 // ============================================================
-// DOORS RENDERING
+// DOORS (Parent-Child Wall-Relative Geometry)
 // ============================================================
+
+function getDoorPosition(door) {
+  const wall = findWall(door.wallId);
+  if (!wall) return null;
+  const direction = getWallDirection(wall);
+  return add(wall.start, multiply(direction, door.offset));
+}
 
 function drawDoors(data) {
   doors.innerHTML = "";
@@ -408,12 +415,16 @@ function drawDoors(data) {
 
   for (const door of data.doors) {
     const wall = findWall(door.wallId);
-    if (!wall) continue;
+    if (!wall) {
+      console.warn(`Wall not found for door: ${door.wallId}`);
+      continue;
+    }
 
     const dir = getWallDirection(wall);
-    const center = add(wall.start, multiply(dir, door.offset));
-    const halfWidth = door.width / 2;
+    const center = getDoorPosition(door);
+    if (!center) continue;
 
+    const halfWidth = door.width / 2;
     const start = subtract(center, multiply(dir, halfWidth));
     const end = add(center, multiply(dir, halfWidth));
 
@@ -437,15 +448,16 @@ function drawDoors(data) {
       createPath(d, "door-arc", doors);
 
       const centerScreen = worldToScreen(center);
-      createText(centerScreen[0], centerScreen[1] - 12, `${door.id || 'door'} (${door.width}m)`, "door-label", doors);
+      createText(centerScreen[0], centerScreen[1] - 12, `${door.id || 'door'} • offset ${door.offset}m`, "door-label", doors);
     } else if (viewMode === "isometric") {
       const h = heightToScreen(door.height || 2.1);
       const tStart = [sScreen[0], sScreen[1] - h];
       const tEnd = [eScreen[0], eScreen[1] - h];
 
+      // Cutout opening & door panel
       createPolygon([sScreen, eScreen, tEnd, tStart], "door-panel", doors);
       const centerScreen = worldToScreen(center);
-      createText(centerScreen[0], centerScreen[1] - h - 6, `${door.id || 'door'} (${door.width}m)`, "door-label", doors);
+      createText(centerScreen[0], centerScreen[1] - h - 6, `${door.id || 'door'} • offset ${door.offset}m`, "door-label", doors);
     }
   }
 }
