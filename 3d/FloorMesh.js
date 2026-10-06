@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-export function createRoomFloor(room) {
+export function createRoomFloor(room, building) {
   if (!room.boundary || room.boundary.length < 3) return null;
 
   const shape = new THREE.Shape();
@@ -27,8 +27,13 @@ export function createRoomFloor(room) {
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.rotation.x = -Math.PI / 2;
-  mesh.position.y = 0.01; // Slightly above ground grid to prevent z-fighting
+
+  // Query level elevation
+  const level = building ? building.getLevel(room.levelId) : null;
+  const elevation = level ? level.elevation : 0;
+  mesh.position.y = elevation + 0.01;
 
   mesh.userData.roomId = room.id;
+  mesh.userData.levelId = room.levelId;
   return mesh;
 }

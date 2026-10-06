@@ -19,6 +19,7 @@ const selectionLayer = document.getElementById("selection");
 const newWallPreview = document.getElementById("new-wall-preview");
 const snapIndicators = document.getElementById("snap-indicators");
 
+const levelSelector = document.getElementById("level-selector");
 const propertyContent = document.getElementById("property-content");
 const jsonOutput = document.getElementById("json-output");
 const status = document.getElementById("status");
@@ -40,6 +41,7 @@ let building = null;
 const snapManager = new SnapManager({ gridSize: 0.25, snapDistance: 0.35 });
 
 let selectedWallId = null;
+let activeLevelId = null; // Active floor level in 2D
 let tool = "select"; // "select", "pan", "move", "new-wall"
 let viewMode = "isometric"; // "simple", "plan", "isometric"
 
@@ -126,6 +128,35 @@ function createText(x, y, text, className, parent) {
 }
 
 // ============================================================
+// LEVEL SELECTOR POPULATION
+// ============================================================
+
+function populateLevelSelector() {
+  levelSelector.innerHTML = "";
+  if (!building) return;
+
+  const levels = building.getLevels();
+  for (const level of levels) {
+    const option = document.createElement("option");
+    option.value = level.id;
+    option.textContent = `${level.id} (${level.elevation}m)`;
+    levelSelector.appendChild(option);
+  }
+
+  if (levels.length > 0) {
+    activeLevelId = levels[0].id;
+    levelSelector.value = activeLevelId;
+  }
+}
+
+levelSelector.addEventListener("change", () => {
+  activeLevelId = levelSelector.value;
+  clearSelection();
+  render();
+  updateStatus(`Active Level: ${activeLevelId}`);
+});
+
+// ============================================================
 // GRID & AXES
 // ============================================================
 
@@ -183,14 +214,16 @@ function drawGrid() {
 }
 
 // ============================================================
-// ROOMS RENDERING
+// ROOMS RENDERING (Filtered by Active Level)
 // ============================================================
 
 function drawRooms() {
   rooms.innerHTML = "";
   if (!building || viewMode === "simple") return;
 
-  for (const room of building.getRooms()) {
+  const roomList = activeLevelId ? building.getRoomsForLevel(activeLevelId) : building.getRooms();
+
+  for (const room of roomList) {
     const points = room.boundary.map(worldToScreen);
     createPolygon(points, "room-plan", rooms);
 
@@ -203,7 +236,7 @@ function drawRooms() {
 }
 
 // ============================================================
-// WALL RENDERING
+// WALL RENDERING (Filtered by Active Level)
 // ============================================================
 
 function getWallCorners(wall) {
@@ -287,20 +320,24 @@ function drawWalls() {
   buildingLayer.innerHTML = "";
   if (!building) return;
 
-  for (const wall of building.getWalls()) {
+  const wallList = activeLevelId ? building.getWallsForLevel(activeLevelId) : building.getWalls();
+
+  for (const wall of wallList) {
     drawWall(wall);
   }
 }
 
 // ============================================================
-// DOORS & WINDOWS RENDERING
+// DOORS & WINDOWS RENDERING (Filtered by Active Level)
 // ============================================================
 
 function drawDoors() {
   doors.innerHTML = "";
   if (!building || viewMode === "simple") return;
 
-  for (const door of building.getDoors()) {
+  const doorList = building.getDoors().filter(d => !activeLevelId || d.levelId === activeLevelId || d.getWall()?.levelId === activeLevelId);
+
+  for (const door of doorList) {
     const wall = door.getWall();
     if (!wall) continue;
 
@@ -337,7 +374,9 @@ function drawWindows() {
   windows.innerHTML = "";
   if (!building || viewMode === "simple") return;
 
-  for (const window of building.getWindows()) {
+  const windowList = building.getWindows().filter(w => !activeLevelId || w.levelId === activeLevelId || w.getWall()?.levelId === activeLevelId);
+
+  for (const window of windowList) {
     const wall = window.getWall();
     if (!wall) continue;
 
@@ -387,7 +426,9 @@ function drawDimensions() {
   dimensionsLayer.innerHTML = "";
   if (!showDimensionsCb.checked || !building) return;
 
-  for (const wall of building.getWalls()) {
+  const wallList = activeLevelId ? building.getWallsForLevel(activeLevelId) : building.getWalls();
+
+  for (const wall of wallList) {
     const dim = new Dimension(wall.start, wall.end, { offset: 0.7 });
     const pts = dim.getOffsetPoints();
 
@@ -396,18 +437,13 @@ function drawDimensions() {
     const dimStartScreen = worldToScreen(pts.dimStart);
     const dimEndScreen = worldToScreen(pts.dimEnd);
 
-    // Extension dashed lines
     createLine(pStartScreen, dimStartScreen, "dim-ext-line", dimensionsLayer);
     createLine(pEndScreen, dimEndScreen, "dim-ext-line", dimensionsLayer);
-
-    // Main dimension line
     createLine(dimStartScreen, dimEndScreen, "dim-line", dimensionsLayer);
 
-    // Ticks / Arrow markers at start and end
     createElement("circle", { cx: dimStartScreen[0], cy: dimStartScreen[1], r: 3, class: "dim-arrow" }, dimensionsLayer);
     createElement("circle", { cx: dimEndScreen[0], cy: dimEndScreen[1], r: 3, class: "dim-arrow" }, dimensionsLayer);
 
-    // Formatted CAD Label: e.g. "6.25 m"
     const labelX = (dimStartScreen[0] + dimEndScreen[0]) / 2;
     const labelY = (dimStartScreen[1] + dimEndScreen[1]) / 2 - 8;
     createText(labelX, labelY, dim.getLabel(), "dim-label", dimensionsLayer);
@@ -425,11 +461,9 @@ function drawSnapIndicators(snapResult, startWorld = null) {
   const ptScreen = worldToScreen(snapResult.point);
 
   if (snapResult.type === "endpoint") {
-    // Green circle for Endpoint
     createElement("circle", { cx: ptScreen[0], cy: ptScreen[1], r: 7, class: "snap-marker-endpoint" }, snapIndicators);
     createText(ptScreen[0], ptScreen[1] - 12, "Endpoint", "snap-label", snapIndicators);
   } else if (snapResult.type === "intersection") {
-    // Purple diamond for Intersection
     const r = 7;
     const pts = [
       [ptScreen[0], ptScreen[1] - r],
@@ -440,7 +474,6 @@ function drawSnapIndicators(snapResult, startWorld = null) {
     createPolygon(pts, "snap-marker-intersection", snapIndicators);
     createText(ptScreen[0], ptScreen[1] - 12, "Intersection", "snap-label", snapIndicators);
   } else if (snapResult.type === "angle" && startWorld) {
-    // Dashed guide line for 45°/90° angle snap
     const startScreen = worldToScreen(startWorld);
     createLine(startScreen, ptScreen, "snap-angle-guide", snapIndicators);
     createElement("circle", { cx: ptScreen[0], cy: ptScreen[1], r: 5, class: "snap-marker-endpoint" }, snapIndicators);
@@ -448,7 +481,6 @@ function drawSnapIndicators(snapResult, startWorld = null) {
       createText(ptScreen[0], ptScreen[1] - 12, snapResult.label, "snap-label", snapIndicators);
     }
   } else if (snapResult.type === "grid") {
-    // Blue dot for Grid snap
     createElement("circle", { cx: ptScreen[0], cy: ptScreen[1], r: 4, class: "snap-marker-grid" }, snapIndicators);
   }
 }
@@ -485,7 +517,7 @@ function updateProperties() {
   }
 
   const title = document.createElement("div");
-  title.innerHTML = `<strong style="font-size: 15px; color: var(--accent);">${wall.id}</strong>`;
+  title.innerHTML = `<strong style="font-size: 15px; color: var(--accent);">${wall.id}</strong> <span style="font-size: 11px; color: var(--text-muted);">(${wall.levelId || 'no level'})</span>`;
   title.style.marginBottom = "10px";
   propertyContent.appendChild(title);
 
@@ -509,7 +541,6 @@ function updateProperties() {
     afterModelChange();
   });
 
-  // Precise Length Input (Updates wall.setLength)
   addNumberInput("Length (m)", Number(wall.getLength().toFixed(3)), value => {
     if (value <= 0) return;
     wall.setLength(value);
@@ -595,7 +626,9 @@ function findWallAtPoint(worldPoint) {
   let closestWall = null;
   let closestDistance = Infinity;
 
-  for (const wall of building.getWalls()) {
+  const wallList = activeLevelId ? building.getWallsForLevel(activeLevelId) : building.getWalls();
+
+  for (const wall of wallList) {
     const dist = distancePointToSegment(worldPoint, wall.start, wall.end);
     if (dist < tolerance && dist < closestDistance) {
       closestDistance = dist;
@@ -614,7 +647,6 @@ function getMousePosition(event) {
   };
 }
 
-// Perform active snapping query
 function querySnap(rawWorldPoint, startWorldPoint = null) {
   return snapManager.snap(rawWorldPoint, building, {
     grid: snapGridCb.checked,
@@ -629,7 +661,6 @@ canvas.addEventListener("mousedown", event => {
   const mouse = getMousePosition(event);
   const rawWorld = screenToWorld(mouse.x, mouse.y);
 
-  // PAN TOOL
   if (tool === "pan") {
     panning = true;
     panStartX = event.clientX;
@@ -637,27 +668,25 @@ canvas.addEventListener("mousedown", event => {
     return;
   }
 
-  // NEW WALL TOOL WITH SNAPPING
   if (tool === "new-wall") {
     const snapResult = querySnap(rawWorld, newWallStart);
     const targetPoint = snapResult.point;
 
     if (!newWallStart) {
       newWallStart = targetPoint;
-      updateStatus("Click endpoint for new wall (Snapping Active)");
+      updateStatus(`Click endpoint for new wall on ${activeLevelId || 'level'}`);
     } else {
-      const newWall = building.addWall(newWallStart, targetPoint);
+      const newWall = building.addWall(newWallStart, targetPoint, 0.2, 2.8, activeLevelId);
       newWallStart = null;
       newWallPreview.innerHTML = "";
       snapIndicators.innerHTML = "";
       selectWall(newWall.id);
-      updateStatus(`Created ${newWall.id} (${newWall.getLength().toFixed(2)}m)`);
+      updateStatus(`Created ${newWall.id} on ${activeLevelId || 'level'}`);
       afterModelChange();
     }
     return;
   }
 
-  // SELECT / MOVE TOOL
   const wall = findWallAtPoint(rawWorld);
 
   if (!wall) {
@@ -679,7 +708,6 @@ canvas.addEventListener("mousemove", event => {
   const mouse = getMousePosition(event);
   const rawWorld = screenToWorld(mouse.x, mouse.y);
 
-  // PANNING
   if (panning) {
     offsetX += event.clientX - panStartX;
     offsetY += event.clientY - panStartY;
@@ -689,7 +717,6 @@ canvas.addEventListener("mousemove", event => {
     return;
   }
 
-  // NEW WALL PREVIEW WITH DYNAMIC SNAPPING & DISTANCE DISPLAY
   if (tool === "new-wall") {
     const snapResult = querySnap(rawWorld, newWallStart);
     currentSnapResult = snapResult;
@@ -713,7 +740,6 @@ canvas.addEventListener("mousemove", event => {
     return;
   }
 
-  // DRAGGING WALL WITH SNAPPING
   if (draggingWall && selectedWallId) {
     const snapResult = querySnap(rawWorld);
     const targetWorld = snapResult.point;
@@ -759,10 +785,7 @@ canvas.addEventListener("wheel", event => {
   render();
 }, { passive: false });
 
-// ============================================================
-// TOOLBAR & VIEW CONTROLS
-// ============================================================
-
+// TOOLBAR & VIEW SWITCHER
 function setTool(nextTool) {
   tool = nextTool;
   newWallStart = null;
@@ -803,7 +826,6 @@ document.getElementById("delete-tool").addEventListener("click", () => {
   afterModelChange();
 });
 
-// Snapping Checkbox Handlers
 [snapGridCb, snapEndpointsCb, snapIntersectionsCb, snapAnglesCb, showDimensionsCb].forEach(cb => {
   cb.addEventListener("change", render);
 });
@@ -857,7 +879,8 @@ async function loadBuilding() {
     const data = JSON.parse(jsonText);
     building = new Building(data);
 
-    updateStatus("Building model loaded. Snapping & Dimensions active.");
+    populateLevelSelector();
+    updateStatus(`Multi-Level Building Model Loaded (${building.getLevels().length} levels)`);
     render();
   } catch (err) {
     console.error(err);

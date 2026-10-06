@@ -1,11 +1,14 @@
 import * as THREE from "three";
 
-export function createDoorMesh(door) {
+export function createDoorMesh(door, building) {
   const wall = door.getWall();
   if (!wall) return null;
 
   const center = door.getPosition();
   if (!center) return null;
+
+  const level = building ? building.getLevel(door.levelId || wall.levelId) : null;
+  const elevation = level ? level.elevation : 0;
 
   const dx = wall.end[0] - wall.start[0];
   const dy = wall.end[1] - wall.start[1];
@@ -26,11 +29,12 @@ export function createDoorMesh(door) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(
     center[0],
-    door.height / 2,
+    elevation + door.height / 2,
     -center[1]
   );
   mesh.rotation.y = angle;
 
   mesh.userData.doorId = door.id;
+  mesh.userData.levelId = door.levelId || wall.levelId;
   return mesh;
 }

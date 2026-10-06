@@ -1,3 +1,4 @@
+import { Level } from "./Level.js";
 import { Wall } from "./Wall.js";
 import { Room } from "./Room.js";
 import { Door } from "./Door.js";
@@ -8,11 +9,39 @@ export class Building {
     this.id = data.id ?? "building-1";
     this.data = data;
 
+    this.levels = (data.levels ?? []).map(level => new Level(level));
     this.walls = (data.walls ?? []).map(wall => new Wall(wall));
     this.rooms = (data.rooms ?? []).map(room => new Room(room, this));
     this.doors = (data.doors ?? []).map(door => new Door(door, this));
     this.windows = (data.windows ?? []).map(window => new Window(window, this));
-    this.levels = data.levels ?? [];
+  }
+
+  // ==========================================================
+  // LEVELS
+  // ==========================================================
+
+  getLevel(id) {
+    return this.levels.find(level => level.id === id) ?? null;
+  }
+
+  getLevels() {
+    return this.levels;
+  }
+
+  getLevelForWall(wall) {
+    return wall.levelId ? this.getLevel(wall.levelId) : null;
+  }
+
+  getLevelForRoom(room) {
+    return room.levelId ? this.getLevel(room.levelId) : null;
+  }
+
+  getWallsForLevel(levelId) {
+    return this.walls.filter(wall => wall.levelId === levelId);
+  }
+
+  getRoomsForLevel(levelId) {
+    return this.rooms.filter(room => room.levelId === levelId);
   }
 
   // ==========================================================
@@ -27,9 +56,10 @@ export class Building {
     return this.walls;
   }
 
-  addWall(start, end, thickness = 0.2, height = 2.8) {
+  addWall(start, end, thickness = 0.2, height = 2.8, levelId = null) {
     const wallData = {
       id: this.createId("wall"),
+      levelId: levelId,
       start: [...start],
       end: [...end],
       thickness,
@@ -48,8 +78,6 @@ export class Building {
     }
 
     this.walls.splice(index, 1);
-
-    // Delete child elements (doors & windows) belonging to this wall
     this.doors = this.doors.filter(door => door.wallId !== id);
     this.windows = this.windows.filter(window => window.wallId !== id);
 
@@ -84,7 +112,7 @@ export class Building {
   }
 
   // ==========================================================
-  // DOORS
+  // DOORS & WINDOWS
   // ==========================================================
 
   getDoor(id) {
@@ -98,10 +126,6 @@ export class Building {
   getDoorsForWall(wallId) {
     return this.doors.filter(door => door.wallId === wallId);
   }
-
-  // ==========================================================
-  // WINDOWS
-  // ==========================================================
 
   getWindow(id) {
     return this.windows.find(window => window.id === id) ?? null;
@@ -132,6 +156,7 @@ export class Building {
 
   hasId(id) {
     return (
+      this.levels.some(level => level.id === id) ||
       this.walls.some(wall => wall.id === id) ||
       this.rooms.some(room => room.id === id) ||
       this.doors.some(door => door.id === id) ||
@@ -146,6 +171,7 @@ export class Building {
   toJSON() {
     return {
       id: this.id,
+      levels: this.levels.map(level => level.toJSON()),
       walls: this.walls.map(wall => wall.toJSON()),
       rooms: this.rooms.map(room => ({
         id: room.id,
@@ -170,8 +196,7 @@ export class Building {
         height: window.height,
         sillHeight: window.sillHeight,
         ...(window.levelId ? { levelId: window.levelId } : {})
-      })),
-      levels: this.levels
+      }))
     };
   }
 

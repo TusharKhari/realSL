@@ -1,28 +1,77 @@
 {
+  "id": "building-1",
+  "levels": [
+    {
+      "id": "ground-floor",
+      "elevation": 0,
+      "height": 2.8
+    },
+    {
+      "id": "first-floor",
+      "elevation": 3.0,
+      "height": 2.8
+    }
+  ],
   "walls": [
     {
-      "id": "wall-1",
+      "id": "wall-ground-1",
+      "levelId": "ground-floor",
       "start": [0, 0],
       "end": [10, 0],
       "thickness": 0.2,
       "height": 2.8
     },
     {
-      "id": "wall-2",
+      "id": "wall-ground-2",
+      "levelId": "ground-floor",
       "start": [10, 0],
       "end": [10, 6],
       "thickness": 0.2,
       "height": 2.8
     },
     {
-      "id": "wall-3",
+      "id": "wall-ground-3",
+      "levelId": "ground-floor",
       "start": [10, 6],
       "end": [0, 6],
       "thickness": 0.2,
       "height": 2.8
     },
     {
-      "id": "wall-4",
+      "id": "wall-ground-4",
+      "levelId": "ground-floor",
+      "start": [0, 6],
+      "end": [0, 0],
+      "thickness": 0.2,
+      "height": 2.8
+    },
+    {
+      "id": "wall-first-1",
+      "levelId": "first-floor",
+      "start": [0, 0],
+      "end": [10, 0],
+      "thickness": 0.2,
+      "height": 2.8
+    },
+    {
+      "id": "wall-first-2",
+      "levelId": "first-floor",
+      "start": [10, 0],
+      "end": [10, 6],
+      "thickness": 0.2,
+      "height": 2.8
+    },
+    {
+      "id": "wall-first-3",
+      "levelId": "first-floor",
+      "start": [10, 6],
+      "end": [0, 6],
+      "thickness": 0.2,
+      "height": 2.8
+    },
+    {
+      "id": "wall-first-4",
+      "levelId": "first-floor",
       "start": [0, 6],
       "end": [0, 0],
       "thickness": 0.2,
@@ -31,9 +80,22 @@
   ],
   "rooms": [
     {
-      "id": "room-1",
-      "name": "Main Room",
+      "id": "room-ground",
+      "name": "Living Room",
       "type": "living_room",
+      "levelId": "ground-floor",
+      "boundary": [
+        [0, 0],
+        [10, 0],
+        [10, 6],
+        [0, 6]
+      ]
+    },
+    {
+      "id": "room-first",
+      "name": "Master Bedroom",
+      "type": "bedroom",
+      "levelId": "first-floor",
       "boundary": [
         [0, 0],
         [10, 0],
@@ -44,8 +106,9 @@
   ],
   "doors": [
     {
-      "id": "door-1",
-      "wallId": "wall-1",
+      "id": "door-ground-1",
+      "wallId": "wall-ground-1",
+      "levelId": "ground-floor",
       "offset": 3,
       "width": 0.9,
       "height": 2.1
@@ -53,8 +116,9 @@
   ],
   "windows": [
     {
-      "id": "window-1",
-      "wallId": "wall-1",
+      "id": "window-first-1",
+      "wallId": "wall-first-1",
+      "levelId": "first-floor",
       "offset": 7,
       "width": 1.8,
       "height": 1.2,

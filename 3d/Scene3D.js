@@ -22,7 +22,7 @@ export class Scene3D {
       0.1,
       1000
     );
-    this.camera.position.set(12, 12, 16);
+    this.camera.position.set(16, 16, 20);
 
     // RENDERER
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -37,7 +37,7 @@ export class Scene3D {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.target.set(5, 1, -3);
+    this.controls.target.set(5, 3, -3);
 
     // LIGHTING & HELPERS
     this.createLights();
@@ -61,16 +61,16 @@ export class Scene3D {
     this.scene.add(ambient);
 
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(15, 25, 15);
+    sun.position.set(20, 35, 20);
     sun.castShadow = true;
     sun.shadow.mapSize.width = 2048;
     sun.shadow.mapSize.height = 2048;
     sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far = 50;
-    sun.shadow.camera.left = -20;
-    sun.shadow.camera.right = 20;
-    sun.shadow.camera.top = 20;
-    sun.shadow.camera.bottom = -20;
+    sun.shadow.camera.far = 80;
+    sun.shadow.camera.left = -25;
+    sun.shadow.camera.right = 25;
+    sun.shadow.camera.top = 25;
+    sun.shadow.camera.bottom = -25;
 
     this.scene.add(sun);
   }
@@ -80,12 +80,11 @@ export class Scene3D {
     grid.position.y = -0.01;
     this.scene.add(grid);
 
-    const axes = new THREE.AxesHelper(4);
+    const axes = new THREE.AxesHelper(5);
     this.scene.add(axes);
   }
 
   renderBuilding() {
-    // Clear old geometry
     while (this.buildingGroup.children.length > 0) {
       const child = this.buildingGroup.children.pop();
       child.geometry?.dispose();
@@ -98,9 +97,9 @@ export class Scene3D {
 
     if (!this.building) return;
 
-    // WALLS
+    // Render multi-level WALLS
     for (const wall of this.building.getWalls()) {
-      const mesh = createWallMesh(wall);
+      const mesh = createWallMesh(wall, this.building);
       if (mesh) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -108,27 +107,27 @@ export class Scene3D {
       }
     }
 
-    // ROOM FLOORS
+    // Render multi-level ROOM FLOORS
     for (const room of this.building.getRooms()) {
-      const floor = createRoomFloor(room);
+      const floor = createRoomFloor(room, this.building);
       if (floor) {
         floor.receiveShadow = true;
         this.buildingGroup.add(floor);
       }
     }
 
-    // DOORS
+    // Render multi-level DOORS
     for (const door of this.building.getDoors()) {
-      const doorMesh = createDoorMesh(door);
+      const doorMesh = createDoorMesh(door, this.building);
       if (doorMesh) {
         doorMesh.castShadow = true;
         this.buildingGroup.add(doorMesh);
       }
     }
 
-    // WINDOWS
+    // Render multi-level WINDOWS
     for (const win of this.building.getWindows()) {
-      const winMesh = createWindowMesh(win);
+      const winMesh = createWindowMesh(win, this.building);
       if (winMesh) {
         this.buildingGroup.add(winMesh);
       }

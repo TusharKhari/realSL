@@ -1,11 +1,14 @@
 import * as THREE from "three";
 
-export function createWindowMesh(win) {
+export function createWindowMesh(win, building) {
   const wall = win.getWall();
   if (!wall) return null;
 
   const center = win.getPosition();
   if (!center) return null;
+
+  const level = building ? building.getLevel(win.levelId || wall.levelId) : null;
+  const elevation = level ? level.elevation : 0;
 
   const dx = wall.end[0] - wall.start[0];
   const dy = wall.end[1] - wall.start[1];
@@ -29,11 +32,12 @@ export function createWindowMesh(win) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(
     center[0],
-    win.sillHeight + win.height / 2,
+    elevation + win.sillHeight + win.height / 2,
     -center[1]
   );
   mesh.rotation.y = angle;
 
   mesh.userData.windowId = win.id;
+  mesh.userData.levelId = win.levelId || wall.levelId;
   return mesh;
 }

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-export function createWallMesh(wall) {
+export function createWallMesh(wall, building) {
   const dx = wall.end[0] - wall.start[0];
   const dy = wall.end[1] - wall.start[1];
   const length = Math.sqrt(dx * dx + dy * dy);
@@ -9,11 +9,13 @@ export function createWallMesh(wall) {
     return null;
   }
 
-  // Wall center in JSON coordinates
   const centerX = (wall.start[0] + wall.end[0]) / 2;
   const centerZ = (wall.start[1] + wall.end[1]) / 2;
 
-  // BoxGeometry: X = length, Y = height, Z = thickness
+  // Query level elevation
+  const level = building ? building.getLevel(wall.levelId) : null;
+  const elevation = level ? level.elevation : 0;
+
   const geometry = new THREE.BoxGeometry(
     length,
     wall.height,
@@ -28,17 +30,17 @@ export function createWallMesh(wall) {
 
   const mesh = new THREE.Mesh(geometry, material);
 
-  // Set 3D Position (Y is vertical height in Three.js)
+  // Position at vertical elevation + wall.height / 2
   mesh.position.set(
     centerX,
-    wall.height / 2,
+    elevation + wall.height / 2,
     -centerZ
   );
 
-  // Rotation around Y axis
   const angle = Math.atan2(dy, dx);
   mesh.rotation.y = angle;
 
   mesh.userData.wallId = wall.id;
+  mesh.userData.levelId = wall.levelId;
   return mesh;
 }
