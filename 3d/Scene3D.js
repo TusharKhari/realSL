@@ -17,10 +17,13 @@ export class Scene3D {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0f172a);
 
-    // CAMERA
+    // CAMERA & SIZING (safe fallbacks ensure no NaN aspect ratio)
+    const initialWidth = container.clientWidth > 0 ? container.clientWidth : Math.max(window.innerWidth / 2, 400);
+    const initialHeight = container.clientHeight > 0 ? container.clientHeight : Math.max(window.innerHeight - 48, 300);
+
     this.camera = new THREE.PerspectiveCamera(
       60,
-      container.clientWidth / container.clientHeight,
+      initialWidth / initialHeight,
       0.1,
       1000
     );
@@ -28,8 +31,8 @@ export class Scene3D {
 
     // RENDERER
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+    this.renderer.setSize(initialWidth, initialHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -50,6 +53,7 @@ export class Scene3D {
     this.scene.add(this.buildingGroup);
 
     this.renderBuilding();
+    this.updateCameraToFit();
 
     // RESIZE EVENT
     window.addEventListener("resize", () => this.resize());
@@ -152,16 +156,48 @@ export class Scene3D {
     }
   }
 
+  setBuilding(building, resetCamera = false) {
+    this.building = building;
+    this.renderBuilding();
+    if (resetCamera) {
+      this.updateCameraToFit();
+    }
+  }
+
+  fitCamera() {
+    this.updateCameraToFit();
+  }
+
+  updateCameraToFit() {
+    if (!this.buildingGroup || this.buildingGroup.children.length === 0) return;
+    const box = new THREE.Box3().setFromObject(this.buildingGroup);
+    if (!box.isEmpty()) {
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      this.controls.target.copy(center);
+
+      const maxDim = Math.max(size.x, size.y, size.z, 6);
+      const dist = maxDim * 1.5;
+
+      this.camera.position.set(center.x + dist * 0.7, center.y + dist * 0.8, center.z + dist * 0.7);
+      this.camera.lookAt(center);
+      this.controls.update();
+    }
+  }
+
   refresh() {
     this.renderBuilding();
   }
 
   resize() {
+    if (!this.container || !this.renderer || !this.camera) return;
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    if (width > 0 && height > 0) {
+      this.camera.aspect = width / height;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(width, height);
+    }
   }
 
   animate() {

@@ -19,10 +19,26 @@ export class JsonEditor {
     });
   }
 
-  setBuilding(buildingData) {
-    this.textarea.value = typeof buildingData === "string" 
+  flush() {
+    if (this.inputTimer) {
+      clearTimeout(this.inputTimer);
+      this.inputTimer = null;
+      this.handleInput();
+    }
+  }
+
+  setBuilding(buildingData, options = {}) {
+    // Avoid overwriting user's active cursor/keystrokes unless forced
+    if (options.force !== true && document.activeElement === this.textarea) {
+      return;
+    }
+    const formatted = typeof buildingData === "string" 
       ? buildingData 
       : JSON.stringify(buildingData, null, 2);
+    
+    if (this.textarea.value !== formatted) {
+      this.textarea.value = formatted;
+    }
     this.clearError();
   }
 

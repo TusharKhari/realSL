@@ -51,6 +51,31 @@ let selectedWallId = null;
 let activeLevelId = null; // Active floor level in 2D
 let tool = "select"; // "select", "pan", "move", "new-wall"
 let viewMode = "isometric"; // "simple", "plan", "isometric"
+let currentLayout = "2d"; // "2d", "3d", "json", "split", "tri"
+
+// Synchronization state with disk building.json
+let lastLoadedDiskText = "";
+let modelModifiedIn2D = false;
+
+const syncDot = document.getElementById("sync-dot");
+const syncBadgeText = document.getElementById("sync-badge-text");
+
+function setSyncStatus(state, text) {
+  if (syncDot) {
+    syncDot.className = `sync-dot ${state}`;
+  }
+  if (syncBadgeText) {
+    syncBadgeText.textContent = text;
+  }
+}
+
+function getCanvasSize() {
+  const rect = canvas ? canvas.getBoundingClientRect() : null;
+  return {
+    width: (rect && rect.width > 0) ? rect.width : window.innerWidth,
+    height: (rect && rect.height > 0) ? rect.height : (window.innerHeight - 48)
+  };
+}
 
 // Camera
 let scale = 45;
@@ -150,7 +175,11 @@ function populateLevelSelector() {
     levelSelector.appendChild(option);
   }
 
-  if (levels.length > 0) {
+  const currentActive = activeLevelId;
+  if (levels.some(l => l.id === currentActive)) {
+    activeLevelId = currentActive;
+    levelSelector.value = activeLevelId;
+  } else if (levels.length > 0) {
     activeLevelId = levels[0].id;
     levelSelector.value = activeLevelId;
   }
@@ -170,8 +199,9 @@ levelSelector.addEventListener("change", () => {
 function drawGrid() {
   grid.innerHTML = "";
 
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const size = getCanvasSize();
+  const width = size.width;
+  const height = size.height;
 
   const topLeft = screenToWorld(0, 0);
   const bottomRight = screenToWorld(width, height);
@@ -579,7 +609,7 @@ function addNumberInput(label, value, onChange) {
   input.step = "0.05";
   input.value = value;
 
-  input.addEventListener("change", () => {
+  input.addEventListener("input", () => {
     const number = Number(input.value);
     if (!Number.isFinite(number)) return;
     onChange(number);
@@ -594,11 +624,13 @@ function addNumberInput(label, value, onChange) {
 // MODEL SYNC & EXPORT
 // ============================================================
 
-function afterModelChange() {
+function afterModelChange(source = "2d") {
+  modelModifiedIn2D = true;
+  setSyncStatus("modified", "Unsaved Edits");
   updateProperties();
   updateJSON();
   if (application && building) {
-    application.setBuilding(building, building.toJSON(), "2d");
+    application.setBuilding(building, building.toJSON(), source, { resetCamera: false });
   } else {
     render();
   }
@@ -966,15 +998,16 @@ function centerViewOnBuilding() {
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
 
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const size = getCanvasSize();
+  const width = size.width;
+  const height = size.height;
 
   const buildingWidth = maxX - minX;
   const buildingHeight = maxY - minY;
 
-  if (buildingWidth > 0 && buildingHeight > 0) {
-    const scaleX = (width * 0.65) / buildingWidth;
-    const scaleY = (height * 0.65) / buildingHeight;
+  if (buildingWidth > 0 || buildingHeight > 0) {
+    const scaleX = buildingWidth > 0 ? (width * 0.65) / buildingWidth : 50;
+    const scaleY = buildingHeight > 0 ? (height * 0.65) / buildingHeight : 50;
     scale = Math.max(15, Math.min(scaleX, scaleY, 60));
   }
 
@@ -984,6 +1017,11 @@ function centerViewOnBuilding() {
 
 function render() {
   if (!building) return;
+
+  if (selectedWallId && !building.getWall(selectedWallId)) {
+    selectedWallId = null;
+    updateProperties();
+  }
 
   drawGrid();
   drawRooms();
@@ -996,17 +1034,168 @@ function render() {
   updateJSON();
 }
 
+function ensureScene3D(resetCamera = false) {
+  const container3d = document.getElementById("canvas-3d");
+  if (!container3d) return null;
+
+  if (!scene3D) {
+    scene3D = new Scene3D(container3d, building);
+  } else {
+    scene3D.setBuilding(building, resetCamera);
+  }
+
+  requestAnimationFrame(() => {
+    if (scene3D) scene3D.resize();
+  });
+
+  return scene3D;
+}
+
+function switchLayout(selectedLayout) {
+  currentLayout = selectedLayout;
+
+  // Flush any pending keystrokes before switching views
+  if (jsonEditor) {
+    jsonEditor.flush();
+  }
+
+  const tabBtns = document.querySelectorAll(".view-tabs .tab-btn");
+  const viewsContainer = document.querySelector(".views");
+  const views = document.querySelectorAll(".views .view");
+
+  tabBtns.forEach(t => t.classList.toggle("active", t.dataset.view === selectedLayout));
+
+  if (viewsContainer) {
+    viewsContainer.className = `views layout-${selectedLayout}`;
+  }
+
+  // Toggle active class for single view compatibility
+  views.forEach(view => {
+    if (selectedLayout === "split") {
+      view.classList.toggle("active", view.id === "view-2d" || view.id === "view-3d");
+    } else if (selectedLayout === "tri") {
+      view.classList.toggle("active", true);
+    } else {
+      view.classList.toggle("active", view.id === `view-${selectedLayout}`);
+    }
+  });
+
+  // Handle synchronization and sizing based on active layout
+  if (selectedLayout === "3d" || selectedLayout === "split" || selectedLayout === "tri") {
+    ensureScene3D(false);
+  }
+
+  if (selectedLayout === "json" || selectedLayout === "tri") {
+    if (jsonEditor && building && modelModifiedIn2D) {
+      jsonEditor.setBuilding(building.toJSON());
+      modelModifiedIn2D = false;
+    }
+  }
+
+  if (selectedLayout === "2d" || selectedLayout === "split" || selectedLayout === "tri") {
+    render();
+    centerViewOnBuilding();
+  }
+
+  requestAnimationFrame(() => {
+    render();
+    if (scene3D) scene3D.resize();
+  });
+
+  updateStatus(`Layout: ${selectedLayout.toUpperCase()} View Active`);
+}
+
+async function checkDiskFile(force = false) {
+  try {
+    setSyncStatus("syncing", "Checking File...");
+    const res = await fetch("./building.json?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) {
+      setSyncStatus("modified", "Disk Read Error");
+      return;
+    }
+
+    const text = await res.text();
+    if (text === lastLoadedDiskText && !force) {
+      if (!modelModifiedIn2D) {
+        setSyncStatus("synced", "building.json Synced");
+      }
+      return;
+    }
+
+    const errors = validateBuildingJSON(text);
+    if (errors && errors.length > 0) {
+      console.warn("Disk file validation warnings:", errors);
+      setSyncStatus("modified", "Validation Error on Disk");
+      if (force) updateStatus(`Disk file validation error: ${errors[0]}`);
+      return;
+    }
+
+    const data = JSON.parse(text);
+    lastLoadedDiskText = text;
+    modelModifiedIn2D = false;
+    building = new Building(data);
+
+    if (jsonEditor) {
+      jsonEditor.setBuilding(data, { force: true });
+    }
+
+    populateLevelSelector();
+
+    if (application) {
+      application.setBuilding(building, data, "disk", { resetCamera: false });
+    } else {
+      render();
+      if (scene3D) scene3D.setBuilding(building, false);
+    }
+
+    centerViewOnBuilding();
+    setSyncStatus("synced", "building.json Synced");
+    updateStatus("⚡ Synchronized with building.json on disk");
+  } catch (err) {
+    console.error("File sync error:", err);
+    setSyncStatus("modified", "Sync Error");
+    if (force) updateStatus(`Sync error: ${err.message}`);
+  }
+}
+
+function exportBuildingJSON() {
+  if (!building) return;
+  const jsonStr = building.toJSONString();
+  const blob = new Blob([jsonStr], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "building.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  updateStatus("💾 Downloaded building.json");
+}
+
+function copyBuildingJSON() {
+  if (!building) return;
+  const jsonStr = building.toJSONString();
+  navigator.clipboard.writeText(jsonStr).then(() => {
+    updateStatus("📋 Copied building JSON to clipboard");
+  }).catch(() => {
+    updateStatus("Could not copy to clipboard");
+  });
+}
+
 async function loadBuilding() {
   try {
-    const response = await fetch("./building.json");
+    setSyncStatus("syncing", "Loading...");
+    const response = await fetch("./building.json?t=" + Date.now(), { cache: "no-store" });
     if (!response.ok) throw new Error("Could not load building.json");
 
     const jsonText = await response.text();
+    lastLoadedDiskText = jsonText;
     const errors = validateBuildingJSON(jsonText);
 
     if (errors.length > 0) {
       updateStatus(`Validation error in building.json`);
-      return;
+      console.warn("Building validation errors:", errors);
     }
 
     const data = JSON.parse(jsonText);
@@ -1022,83 +1211,122 @@ async function loadBuilding() {
       errorElement: jsonErrorElement,
       onBuildingChanged: (newBuilding, json) => {
         building = newBuilding;
+        modelModifiedIn2D = false;
+        setSyncStatus("modified", "JSON Modified");
         populateLevelSelector();
+        centerViewOnBuilding();
         updateStatus("Building model updated from JSON Editor");
+
         if (application) {
-          application.setBuilding(newBuilding, json, "jsonEditor");
+          application.setBuilding(newBuilding, json, "jsonEditor", { resetCamera: false });
         } else {
           render();
+          if (scene3D) scene3D.setBuilding(newBuilding, false);
         }
       }
     });
 
-    jsonEditor.setBuilding(data);
+    jsonEditor.setBuilding(data, { force: true });
 
     // Initialize Application controller
     application = new Application({
       renderer2D: {
-        render: () => render()
+        render: (b) => {
+          if (b) building = b;
+          render();
+        }
       },
       renderer3D: {
+        setBuilding: (b, resetCam = false) => {
+          if (scene3D) {
+            scene3D.setBuilding(b || building, resetCam);
+          }
+        },
         refresh: () => {
-          if (scene3D) scene3D.refresh();
+          if (scene3D) {
+            scene3D.setBuilding(building, false);
+          }
         }
       },
       jsonEditor: jsonEditor
     });
 
-    application.setBuilding(building, data, "init");
+    application.setBuilding(building, data, "init", { resetCamera: true });
+
+    // Pre-initialize 3D scene so it's ready immediately
+    ensureScene3D(true);
 
     // JSON Toolbar Actions
     const formatBtn = document.getElementById("format-json");
     if (formatBtn) {
-      formatBtn.addEventListener("click", () => jsonEditor.format());
+      formatBtn.addEventListener("click", () => {
+        jsonEditor.format();
+        updateStatus("JSON formatted");
+      });
     }
 
     const applyBtn = document.getElementById("apply-json");
     if (applyBtn) {
-      applyBtn.addEventListener("click", () => jsonEditor.handleInput());
+      applyBtn.addEventListener("click", () => {
+        jsonEditor.handleInput();
+        updateStatus("JSON applied to 2D & 3D");
+      });
     }
 
-    // Navigation View Tabs Switcher (2D, 3D, JSON)
-    const tabBtns = document.querySelectorAll(".view-tabs .tab-btn");
-    const views = document.querySelectorAll(".views .view");
+    const reloadBtn = document.getElementById("reload-json");
+    if (reloadBtn) {
+      reloadBtn.addEventListener("click", () => checkDiskFile(true));
+    }
 
+    // Top Navigation View Switcher (2D, 3D, JSON, Split, Tri)
+    const tabBtns = document.querySelectorAll(".view-tabs .tab-btn");
     tabBtns.forEach(tab => {
       tab.addEventListener("click", () => {
         const selected = tab.dataset.view;
-
-        tabBtns.forEach(t => t.classList.toggle("active", t === tab));
-        views.forEach(view => {
-          view.classList.toggle("active", view.id === `view-${selected}`);
-        });
-
-        if (selected === "3d") {
-          if (!scene3D) {
-            const container3d = document.getElementById("canvas-3d");
-            scene3D = new Scene3D(container3d, building);
-          } else {
-            scene3D.resize();
-            scene3D.refresh();
-          }
-          updateStatus("3D WebGL View Active");
-        } else if (selected === "json") {
-          if (jsonEditor && building) {
-            jsonEditor.setBuilding(building.toJSON());
-          }
-          updateStatus("JSON Editor Active");
-        } else if (selected === "2d") {
-          render();
-          updateStatus(`Active Level: ${activeLevelId || 'ground-floor'}`);
+        if (selected) {
+          switchLayout(selected);
         }
       });
     });
 
+    // Top Navigation Action Buttons
+    const navSyncBtn = document.getElementById("nav-sync-file");
+    if (navSyncBtn) {
+      navSyncBtn.addEventListener("click", () => checkDiskFile(true));
+    }
+
+    const navSaveBtn = document.getElementById("nav-save-file");
+    if (navSaveBtn) {
+      navSaveBtn.addEventListener("click", exportBuildingJSON);
+    }
+
+    const navCopyBtn = document.getElementById("nav-copy-json");
+    if (navCopyBtn) {
+      navCopyBtn.addEventListener("click", copyBuildingJSON);
+    }
+
+    // 3D Fit Camera button
+    const fitCamBtn = document.getElementById("fit-camera-btn");
+    if (fitCamBtn) {
+      fitCamBtn.addEventListener("click", () => {
+        if (scene3D) {
+          scene3D.fitCamera();
+          updateStatus("3D camera centered on building");
+        }
+      });
+    }
+
+    // Polling file watcher for local disk edits (checks every 1.5s and on window focus)
+    setInterval(() => checkDiskFile(false), 1500);
+    window.addEventListener("focus", () => checkDiskFile(false));
+
     populateLevelSelector();
+    setSyncStatus("synced", "building.json Synced");
     updateStatus(`Multi-Level Building Model Loaded (${building.getLevels().length} levels)`);
     render();
   } catch (err) {
     console.error(err);
+    setSyncStatus("modified", "Load Error");
     updateStatus(`Error: ${err.message}`);
   }
 }
@@ -1107,4 +1335,5 @@ window.addEventListener("resize", () => {
   render();
   if (scene3D) scene3D.resize();
 });
+
 loadBuilding();
